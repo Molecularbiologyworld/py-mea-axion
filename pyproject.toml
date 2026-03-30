@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "py-mea-axion"
+version = "0.1.0"
+description = "End-to-end MEA data analysis for Axion Biosystems instruments"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "pandas>=2.1",
+    "matplotlib>=3.8",
+    "seaborn>=0.13",
+    "pingouin>=0.5.4",
+    "statsmodels>=0.14",
+]
+
+[project.optional-dependencies]
+interactive = ["plotly>=5.18"]
+dev = ["pytest>=7.4", "pytest-cov>=4.1"]
+docs = ["sphinx>=7.2", "nbsphinx>=0.9"]
+
+[project.scripts]
+mea-axion = "py_mea_axion.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["py_mea_axion*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
