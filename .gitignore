@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data files (large binaries — keep out of version control)
+LGI2 KD data/
+data/
+*.spk
+*.raw
+*.npz
+
+# Claude Code internals
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
