@@ -725,9 +725,9 @@ class MEAExperiment:
         matplotlib.figure.Figure
         """
         self._require_ran()
+        kwargs.setdefault("title", f"STTC — {well_id}")
         return plot_sttc_matrix(
             self._sttc_matrices.get(well_id, pd.DataFrame()),
-            title=f"STTC — {well_id}",
             **kwargs,
         )
 
@@ -752,9 +752,9 @@ class MEAExperiment:
         """
         self._require_ran()
         nbs = self._network_bursts_dict.get(well_id, [])
+        kwargs.setdefault("title", f"Network bursts — {well_id}")
         return plot_network_burst_timeline(
             nbs, self._total_time_s,
-            title=f"Network bursts — {well_id}",
             **kwargs,
         )
 
