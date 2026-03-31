@@ -238,17 +238,18 @@ class TestPlotBurstRaster:
         fig = plot_burst_raster(well_spikes, well_bursts)
         assert isinstance(fig, Figure)
 
-    def test_one_axes(self, well_spikes, well_bursts):
+    def test_two_axes(self, well_spikes, well_bursts):
+        # Own-figure call produces ASDR (axes[0]) + raster (axes[1]).
         fig = plot_burst_raster(well_spikes, well_bursts)
-        assert len(fig.axes) == 1
+        assert len(fig.axes) == 2
 
     def test_ytick_count_matches_electrodes(self, well_spikes, well_bursts):
         fig = plot_burst_raster(well_spikes, well_bursts)
-        assert len(fig.axes[0].get_yticks()) == len(well_spikes)
+        assert len(fig.axes[1].get_yticks()) == len(well_spikes)
 
     def test_xlabel(self, well_spikes, well_bursts):
         fig = plot_burst_raster(well_spikes, well_bursts)
-        assert "time" in fig.axes[0].get_xlabel().lower()
+        assert "time" in fig.axes[1].get_xlabel().lower()
 
     def test_custom_title(self, well_spikes, well_bursts):
         fig = plot_burst_raster(well_spikes, well_bursts, title="Test well")

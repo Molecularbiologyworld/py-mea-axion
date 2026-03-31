@@ -120,14 +120,22 @@ def plot_burst_raster(
     spike_color: str = "#333333",
     burst_color: str = "#e87b14",
     burst_alpha: float = 0.25,
-    figsize: Tuple[float, float] = (8.0, 4.0),
+    asdr_bin_s: float = 0.2,
+    asdr_color: str = "#4878CF",
+    figsize: Tuple[float, float] = (8.0, 5.5),
     title: str = "",
     ax: Optional[Axes] = None,
 ) -> Figure:
-    """Plot a spike raster with burst-period overlays for a single well.
+    """Plot a spike raster with ASDR histogram and burst-period overlays.
 
-    Each row of the raster corresponds to one electrode.  Burst periods are
-    drawn as filled rectangles behind the spike marks.
+    When called without a pre-existing *ax*, the figure has two panels:
+
+    * **Top** — ASDR (Array-wide Spike Detection Rate): total spikes across
+      all electrodes binned in *asdr_bin_s* windows.
+    * **Bottom** — Raster: one row per electrode with burst rectangles.
+
+    When an *ax* is supplied the ASDR panel is omitted and only the raster is
+    drawn into that axes (for embedding in larger figures).
 
     Parameters
     ----------
@@ -145,12 +153,17 @@ def plot_burst_raster(
         Fill colour for burst-period rectangles.  Default orange.
     burst_alpha : float, optional
         Transparency for burst overlays.  Default 0.25.
+    asdr_bin_s : float, optional
+        Bin width (seconds) for the ASDR histogram.  Default 0.2 s.
+    asdr_color : str, optional
+        Bar colour for the ASDR histogram.  Default steelblue.
     figsize : tuple, optional
-        Figure size ``(width, height)`` in inches.  Default ``(8, 4)``.
+        Figure size ``(width, height)`` in inches.  Default ``(8, 5.5)``.
     title : str, optional
-        Figure title.
+        Figure title (placed above the ASDR panel).
     ax : Axes, optional
-        Pre-existing axes.  A new figure is created when ``None``.
+        Pre-existing axes.  When supplied the ASDR panel is skipped and only
+        the raster is drawn.  A new two-panel figure is created when ``None``.
 
     Returns
     -------
@@ -164,27 +177,53 @@ def plot_burst_raster(
     >>> bursts = {"A1_11": [Burst(0.1, 0.3, np.array([0.1,0.2,0.3]), 3, 0.2, 0.1)]}
     >>> fig = plot_burst_raster(spikes, bursts)
     >>> len(fig.axes)
-    1
+    2
     """
     eids = sorted(well_spike_dict.keys())
     n = len(eids)
 
     # Infer t_stop from the data if not provided.
     if t_stop is None:
-        all_times = [t for ts in well_spike_dict.values() if len(ts) for t in [ts.max()]]
+        all_times = [ts.max() for ts in well_spike_dict.values() if len(ts)]
         t_stop = (max(all_times) + 0.1) if all_times else 1.0
 
     own_fig = ax is None
     if own_fig:
-        fig, ax = plt.subplots(figsize=figsize)
+        fig = plt.figure(figsize=figsize)
+        gs  = fig.add_gridspec(2, 1, height_ratios=[1, 3], hspace=0.08)
+        ax_asdr   = fig.add_subplot(gs[0])
+        ax_raster = fig.add_subplot(gs[1], sharex=ax_asdr)
     else:
-        fig = ax.get_figure()
+        fig       = ax.get_figure()
+        ax_raster = ax
 
+    # ── ASDR panel (own figure only) ──────────────────────────────────────────
+    if own_fig:
+        all_spikes = np.concatenate(
+            [ts for ts in well_spike_dict.values() if len(ts)]
+        ) if any(len(ts) for ts in well_spike_dict.values()) else np.array([])
+
+        if len(all_spikes):
+            bins = np.arange(t_start, t_stop + asdr_bin_s, asdr_bin_s)
+            counts, edges = np.histogram(all_spikes, bins=bins)
+            ax_asdr.bar(
+                edges[:-1], counts,
+                width=asdr_bin_s * 0.9,
+                color=asdr_color, alpha=0.8, edgecolor="none",
+                align="edge",
+            )
+
+        ax_asdr.set_xlim(t_start, t_stop)
+        ax_asdr.set_ylabel("Spike count\nper bin", fontsize=8)
+        ax_asdr.set_title(title or "Burst raster", fontsize=9)
+        ax_asdr.tick_params(labelbottom=False, labelsize=8)
+        ax_asdr.spines["bottom"].set_visible(False)
+
+    # ── Raster panel ──────────────────────────────────────────────────────────
     for row_idx, eid in enumerate(eids):
-        spikes = well_spike_dict[eid]
-        in_window = spikes[(spikes >= t_start) & (spikes <= t_stop)]
+        spikes     = well_spike_dict[eid]
+        in_window  = spikes[(spikes >= t_start) & (spikes <= t_stop)]
 
-        # Burst rectangles.
         for burst in well_burst_dict.get(eid, []):
             if burst.end_time < t_start or burst.start_time > t_stop:
                 continue
@@ -197,21 +236,22 @@ def plot_burst_raster(
                 alpha=burst_alpha,
                 zorder=1,
             )
-            ax.add_patch(rect)
+            ax_raster.add_patch(rect)
 
-        # Spike ticks.
         if len(in_window):
-            ax.vlines(in_window, row_idx - 0.4, row_idx + 0.4,
-                      color=spike_color, linewidth=0.5, zorder=2)
+            ax_raster.vlines(in_window, row_idx - 0.4, row_idx + 0.4,
+                             color=spike_color, linewidth=0.5, zorder=2)
 
-    ax.set_xlim(t_start, t_stop)
-    ax.set_ylim(-0.5, n - 0.5)
-    ax.set_yticks(range(n))
-    ax.set_yticklabels(eids, fontsize=6)
-    ax.set_xlabel("Time (s)", fontsize=9)
-    ax.set_ylabel("Electrode", fontsize=9)
-    ax.set_title(title or "Burst raster", fontsize=9)
-    ax.tick_params(axis="x", labelsize=8)
+    ax_raster.set_xlim(t_start, t_stop)
+    ax_raster.set_ylim(-0.5, n - 0.5)
+    ax_raster.set_yticks(range(n))
+    ax_raster.set_yticklabels(eids, fontsize=6)
+    ax_raster.set_xlabel("Time (s)", fontsize=9)
+    ax_raster.set_ylabel("Electrode", fontsize=9)
+    ax_raster.tick_params(axis="x", labelsize=8)
+
+    if not own_fig:
+        ax_raster.set_title(title or "Burst raster", fontsize=9)
 
     if own_fig:
         fig.tight_layout()
