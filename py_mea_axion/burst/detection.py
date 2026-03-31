@@ -52,7 +52,7 @@ def detect_bursts(
     spike_times: np.ndarray,
     max_isi_s: float = 0.1,
     min_spikes: int = 5,
-    min_ibi_s: float = 0.2,
+    min_ibi_s: float = 0.0,
     algorithm: str = "isi_threshold",
     surprise_threshold: float = 2.0,
 ) -> List[Burst]:
@@ -71,7 +71,8 @@ def detect_bursts(
         Minimum number of spikes required for a valid burst.  Default 5.
     min_ibi_s : float, optional
         Minimum inter-burst interval in seconds.  Pairs of bursts with a
-        gap smaller than this are merged.  Default 0.2 s (200 ms).
+        gap smaller than this are merged.  Default 0.0 s (no merging),
+        matching the NeuralMetric Tools ISI-threshold behaviour.
     algorithm : {'isi_threshold', 'poisson_surprise'}, optional
         Burst detection algorithm to use.  Default ``'isi_threshold'``.
     surprise_threshold : float, optional
