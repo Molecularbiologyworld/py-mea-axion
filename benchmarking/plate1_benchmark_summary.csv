@@ -1,0 +1,7 @@
+metric,n,pearson_r,p_value,bias,mean_abs_error,mean_pct_error
+MFR (Hz),625,1.0000,0.0000,0.0089,0.0089,0.2377
+N active electrodes,625,1.0000,0.0000,0.0000,0.0000,0.0000
+N bursts,625,0.9999,0.0000,0.9184,0.9184,0.2362
+Mean burst duration (s),530,0.9938,0.0000,0.0231,0.0288,6.8639
+N network bursts,625,0.9998,0.0000,0.0784,0.0784,0.3855
+Mean NB duration (s),456,0.9983,0.0000,-0.0101,0.0101,0.3886
