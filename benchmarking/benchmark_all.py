@@ -109,7 +109,7 @@ def spk_for_csv(csv_path: pathlib.Path) -> pathlib.Path | None:
 
 from py_mea_axion.pipeline import MEAExperiment  # noqa: E402
 
-csv_files = sorted(BENCH_DIR.glob("*_neuralMetrics.csv"))
+csv_files = sorted(BENCH_DIR.glob("*Plate 2*_neuralMetrics.csv"))
 print(f"Found {len(csv_files)} NeuralMetric CSV files.")
 
 rows = []   # one row per (recording, well)
