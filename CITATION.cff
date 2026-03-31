@@ -1,0 +1,46 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "py-mea-axion: end-to-end MEA data analysis for Axion Biosystems instruments"
+version: 0.1.0
+date-released: 2026-03-31
+license: MIT
+repository-code: "https://github.com/Molecularbiologyworld/py-mea-axion"
+abstract: >
+  py-mea-axion is an open-source Python package for end-to-end analysis
+  of multi-electrode array (MEA) recordings from Axion Biosystems
+  instruments. It provides direct parsing of raw .spk binary files,
+  spike and burst metrics, network burst detection, spike-train
+  synchrony (STTC), statistical comparison tools, and publication-ready
+  visualisations — all accessible through a high-level Python API and
+  a command-line interface.
+keywords:
+  - MEA
+  - multi-electrode array
+  - electrophysiology
+  - spike detection
+  - burst detection
+  - neural networks
+  - neuroscience
+  - Axion Biosystems
+authors:
+  - family-names: "Molecularbiologyworld"
+    alias: "Molecularbiologyworld"
+    website: "https://github.com/Molecularbiologyworld"
+references:
+  - type: article
+    title: >
+      Detecting pairwise correlations in spike trains: an objective
+      comparison of methods and application to the study of retinal waves
+    authors:
+      - family-names: Cutts
+        given-names: Caroline S.
+      - family-names: Eglen
+        given-names: Stephen J.
+    journal: "Journal of Neuroscience"
+    volume: 34
+    issue: 43
+    start: 14288
+    end: 14303
+    year: 2014
+    doi: "10.1523/JNEUROSCI.2767-14.2014"

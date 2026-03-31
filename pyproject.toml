@@ -6,6 +6,8 @@ build-backend = "setuptools.backends.legacy:build"
 name = "py-mea-axion"
 version = "0.1.0"
 description = "End-to-end MEA data analysis for Axion Biosystems instruments"
+readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = [
     "numpy>=1.26",
