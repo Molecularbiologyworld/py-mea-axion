@@ -456,8 +456,9 @@ def load_spikes_from_spk(
         assumed_fs = fs_override if fs_override is not None else 12500.0
         rec_sz = 0
         # Validate each candidate by sampling the last-record timestamp.
-        # A real MEA recording runs between 30 s and 86 400 s (24 h).
-        _TS_MIN, _TS_MAX = 30.0, 86_400.0
+        # Upper bound 86 400 s (24 h) catches garbage values from a wrong
+        # record size.  Lower bound is 0 to allow short test/synthetic files.
+        _TS_MIN, _TS_MAX = 0.0, 86_400.0
         for sz in [68, 82, 96, 106, 110, 114, 126, 130, 134, 158, 162]:
             if avail_fb % sz != 0:
                 continue
