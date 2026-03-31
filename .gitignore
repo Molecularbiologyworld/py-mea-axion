@@ -32,6 +32,14 @@ data/
 # Generated output (figures and CSVs produced by the pipeline)
 example plots/
 
+# Unpublished experimental data — keep off GitHub until published
+benchmarking/*_neuralMetrics.csv
+benchmarking/*_raw.csv
+benchmarking/figures/
+benchmarking/figures_all/
+benchmarking/figures_plate1/
+notebooks/notebook_output/
+
 # Claude Code internals
 .claude/
 
