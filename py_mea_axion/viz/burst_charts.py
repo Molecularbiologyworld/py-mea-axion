@@ -217,7 +217,6 @@ def plot_burst_raster(
         ax_asdr.set_ylabel("Spike count\nper bin", fontsize=8)
         ax_asdr.set_title(title or "Burst raster", fontsize=9)
         ax_asdr.tick_params(labelbottom=False, labelsize=8)
-        ax_asdr.spines["bottom"].set_visible(False)
 
     # ── Raster panel ──────────────────────────────────────────────────────────
     for row_idx, eid in enumerate(eids):
