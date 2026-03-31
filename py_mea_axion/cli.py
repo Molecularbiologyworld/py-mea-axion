@@ -292,22 +292,22 @@ def _save_figures(exp, fig_dir: Path) -> None:
     for well_id in exp.wells:
         # Electrode MFR heatmap.
         fig = exp.plot_heatmap(well_id, metric="mfr_hz")
-        fig.savefig(fig_dir / f"{well_id}_heatmap_mfr.png", dpi=150, bbox_inches="tight")
+        fig.savefig(fig_dir / f"{well_id}_heatmap_mfr.png", dpi=600, bbox_inches="tight")
         plt.close(fig)
 
         # Burst raster.
         fig = exp.plot_raster(well_id)
-        fig.savefig(fig_dir / f"{well_id}_raster.png", dpi=150, bbox_inches="tight")
+        fig.savefig(fig_dir / f"{well_id}_raster.png", dpi=600, bbox_inches="tight")
         plt.close(fig)
 
         # STTC matrix.
         fig = exp.plot_sttc(well_id)
-        fig.savefig(fig_dir / f"{well_id}_sttc.png", dpi=150, bbox_inches="tight")
+        fig.savefig(fig_dir / f"{well_id}_sttc.png", dpi=600, bbox_inches="tight")
         plt.close(fig)
 
         # Network-burst timeline.
         fig = exp.plot_network_timeline(well_id)
-        fig.savefig(fig_dir / f"{well_id}_network_timeline.png", dpi=150, bbox_inches="tight")
+        fig.savefig(fig_dir / f"{well_id}_network_timeline.png", dpi=600, bbox_inches="tight")
         plt.close(fig)
 
     log.info("Saved %d figures to %s", len(exp.wells) * 4, fig_dir)
@@ -321,7 +321,7 @@ def _save_figures(exp, fig_dir: Path) -> None:
                     fig = exp.plot_trajectory(metric)
                     fig.savefig(
                         fig_dir / f"trajectory_{metric}.png",
-                        dpi=150, bbox_inches="tight",
+                        dpi=600, bbox_inches="tight",
                     )
                     plt.close(fig)
                 except Exception:  # noqa: BLE001
