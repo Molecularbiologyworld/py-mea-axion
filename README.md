@@ -1,5 +1,9 @@
 # py-mea-axion
 
+[![PyPI version](https://img.shields.io/pypi/v/py-mea-axion.svg)](https://pypi.org/project/py-mea-axion/)
+[![Python](https://img.shields.io/pypi/pyversions/py-mea-axion.svg)](https://pypi.org/project/py-mea-axion/)
+[![GitHub](https://img.shields.io/badge/GitHub-py--mea--axion-blue?logo=github)](https://github.com/Molecularbiologyworld/py-mea-axion)
+
 End-to-end analysis of multi-electrode array (MEA) recordings from
 **Axion Biosystems** instruments, in Python.
 
@@ -12,20 +16,18 @@ publication-ready figures.
 
 ## Installation
 
-> **Note:** the package is not yet on PyPI.  Install directly from GitHub.
-
 ### Recommended: new conda environment
 
 ```bash
 conda create -n mea python=3.11
 conda activate mea
-pip install git+https://github.com/Molecularbiologyworld/py-mea-axion.git
+pip install py-mea-axion
 ```
 
 ### Or into an existing environment
 
 ```bash
-pip install git+https://github.com/Molecularbiologyworld/py-mea-axion.git
+pip install py-mea-axion
 ```
 
 ### For development (editable install from a local clone)
