@@ -75,6 +75,11 @@ class MEAExperiment:
     active_threshold_hz : float, optional
         MFR threshold for classifying an electrode as active.
         Default 0.1 Hz.
+    min_active_electrodes : int, optional
+        Minimum number of active electrodes a well must have to be
+        included in the analysis.  Wells that fall below this threshold
+        are silently excluded and listed in :attr:`excluded_wells`.
+        Set to ``0`` to disable filtering.  Default 1.
     burst_kwargs : dict, optional
         Keyword arguments forwarded to
         :func:`~py_mea_axion.burst.detection.detect_bursts` for every
@@ -98,6 +103,9 @@ class MEAExperiment:
     well_summary : pd.DataFrame
         Per-well aggregate metrics (active electrode count, mean MFR,
         burst rate, STTC, …).  Populated after :meth:`run`.
+    excluded_wells : list of str
+        Wells that were removed because they had fewer active electrodes
+        than *min_active_electrodes*.  Populated after :meth:`run`.
 
     Examples
     --------
@@ -121,6 +129,7 @@ class MEAExperiment:
         wells: Optional[List[str]] = None,
         fs_override: Optional[float] = None,
         active_threshold_hz: float = 0.1,
+        min_active_electrodes: int = 1,
         burst_kwargs: Optional[Dict[str, Any]] = None,
         network_kwargs: Optional[Dict[str, Any]] = None,
         sttc_dt_s: float = 0.05,
@@ -130,6 +139,7 @@ class MEAExperiment:
         self._wells_filter = wells
         self._fs_override = fs_override
         self.active_threshold_hz = active_threshold_hz
+        self._min_active_electrodes = min_active_electrodes
         self._burst_kwargs: Dict[str, Any] = burst_kwargs or {}
         self._network_kwargs: Dict[str, Any] = network_kwargs or {}
         self.sttc_dt_s = sttc_dt_s
@@ -144,6 +154,7 @@ class MEAExperiment:
         total_time_s: float,
         metadata: Optional[Union[str, Path, pd.DataFrame]] = None,
         active_threshold_hz: float = 0.1,
+        min_active_electrodes: int = 1,
         burst_kwargs: Optional[Dict[str, Any]] = None,
         network_kwargs: Optional[Dict[str, Any]] = None,
         sttc_dt_s: float = 0.05,
@@ -182,6 +193,7 @@ class MEAExperiment:
         obj._wells_filter = None
         obj._fs_override = None
         obj.active_threshold_hz = active_threshold_hz
+        obj._min_active_electrodes = min_active_electrodes
         obj._burst_kwargs = burst_kwargs or {}
         obj._network_kwargs = network_kwargs or {}
         obj.sttc_dt_s = sttc_dt_s
@@ -201,6 +213,7 @@ class MEAExperiment:
         self._sttc_matrices: Dict[str, pd.DataFrame] = {}
         self._well_summary: Optional[pd.DataFrame] = None
         self._metadata: Optional[pd.DataFrame] = None
+        self._excluded_wells: List[str] = []
         self._ran = False
 
     # ── Core pipeline ─────────────────────────────────────────────────────────
@@ -229,6 +242,7 @@ class MEAExperiment:
         self._step_load_spikes()
         self._step_load_metadata()
         self._step_spike_metrics()
+        self._step_filter_viable_wells()
         self._step_burst_detection()
         self._step_network_bursts()
         self._step_sttc()
@@ -287,6 +301,42 @@ class MEAExperiment:
                 "well_id", "electrode_id", "n_spikes", "mfr_hz",
                 "mean_isi", "median_isi", "cv_isi", "is_active",
             ])
+
+    def _step_filter_viable_wells(self) -> None:
+        """Drop wells with fewer active electrodes than *min_active_electrodes*.
+
+        This runs after spike metrics so that the same plate-map (e.g. all
+        24 wells) can be supplied to both Plate 1 (full plate) and Plate 2
+        (12 populated wells) recordings.  Empty wells are automatically
+        excluded; their IDs are stored in :attr:`excluded_wells`.
+        """
+        if self._min_active_electrodes <= 0:
+            return
+
+        sm = self._spike_metrics
+        if sm is None or sm.empty:
+            return
+
+        active_counts = (
+            sm[sm["is_active"]].groupby("well_id").size()
+        )
+        to_drop = [
+            w for w in list(self._spikes.keys())
+            if active_counts.get(w, 0) < self._min_active_electrodes
+        ]
+        if not to_drop:
+            return
+
+        for w in to_drop:
+            del self._spikes[w]
+        self._spike_metrics = sm[
+            ~sm["well_id"].isin(to_drop)
+        ].reset_index(drop=True)
+        self._excluded_wells = sorted(to_drop)
+        log.info(
+            "Excluded %d well(s) with < %d active electrode(s): %s",
+            len(to_drop), self._min_active_electrodes, self._excluded_wells,
+        )
 
     def _step_burst_detection(self) -> None:
         all_burst_dfs = []
@@ -441,6 +491,12 @@ class MEAExperiment:
         """Plate-map metadata, or ``None`` if not provided."""
         return self._metadata
 
+    @property
+    def excluded_wells(self) -> List[str]:
+        """Wells removed because they had fewer active electrodes than
+        *min_active_electrodes*.  Empty list when no wells were excluded."""
+        return list(self._excluded_wells)
+
     # ── Data access helpers ───────────────────────────────────────────────────
 
     def well_spikes(self, well_id: str) -> Dict[str, np.ndarray]:
@@ -503,6 +559,32 @@ class MEAExperiment:
         if self._metadata is not None:
             ws = ws.merge(self._metadata, on="well_id", how="left")
         return ws
+
+    def to_csv(
+        self,
+        path: Union[str, Path],
+        float_format: str = "%.6f",
+    ) -> Path:
+        """Save :meth:`joined_summary` to a CSV file.
+
+        Parameters
+        ----------
+        path : str or Path
+            Destination file path.
+        float_format : str, optional
+            printf-style format string for floating-point columns.
+            Default ``'%.6f'``.
+
+        Returns
+        -------
+        Path
+            The resolved output path.
+        """
+        self._require_ran()
+        p = Path(path)
+        self.joined_summary().to_csv(p, index=False, float_format=float_format)
+        log.info("Results saved to %s", p)
+        return p
 
     # ── Statistics ────────────────────────────────────────────────────────────
 
