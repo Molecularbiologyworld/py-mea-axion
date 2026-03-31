@@ -455,15 +455,28 @@ def load_spikes_from_spk(
         )
         assumed_fs = fs_override if fs_override is not None else 12500.0
         rec_sz = 0
+        # Validate each candidate by sampling the last-record timestamp.
+        # A real MEA recording runs between 30 s and 86 400 s (24 h).
+        _TS_MIN, _TS_MAX = 30.0, 86_400.0
         for sz in [68, 82, 96, 106, 110, 114, 126, 130, 134, 158, 162]:
-            if avail_fb % sz == 0:
-                rec_sz = sz
-                break
+            if avail_fb % sz != 0:
+                continue
+            # Peek at the last record's timestamp to sanity-check this size.
+            n_rec_candidate = avail_fb // sz
+            last_off = bv_data_start + (n_rec_candidate - 1) * sz
+            if last_off + 14 <= size:
+                start_samp_peek, = struct.unpack_from("<q", raw, last_off)
+                trig_off_peek, = struct.unpack_from("<I", raw, last_off + 10)
+                ts_peek = (start_samp_peek + trig_off_peek) / assumed_fs
+                if _TS_MIN <= ts_peek <= _TS_MAX:
+                    rec_sz = sz
+                    break
         if rec_sz == 0:
             raise ValueError(
                 "Could not determine spike record size — "
-                "BlockVectorHeader missing and no candidate size divides "
-                "the data length evenly."
+                "BlockVectorHeader missing and no candidate size produces "
+                "plausible timestamps (30–86400 s).  "
+                "Re-run with fs_override=<correct_hz> or check the file."
             )
         hdr_sz = 30  # Spike_v1.LOADED_HEADER_SIZE
         n_samp = (rec_sz - hdr_sz) // 2

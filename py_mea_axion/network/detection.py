@@ -3,22 +3,27 @@ network/detection.py
 ====================
 Network burst detection across multiple electrodes.
 
-A **network burst** is a period in which a sufficient fraction of the
-active electrodes in a well are bursting simultaneously.  The algorithm
-works on a discretised time grid:
+Two algorithms are provided:
 
-1. For each electrode, build a binary burst mask (1 = currently inside a
-   burst, 0 = not).
-2. Sum the masks across electrodes → *participation count* per time bin.
-3. Threshold at ``ceil(participation_threshold × n_active_electrodes)``.
-4. Identify contiguous runs of bins that exceed the threshold.
-5. Merge runs separated by less than *min_network_ibi_s*.
-6. Return a list of ``NetworkBurst`` namedtuples.
+``combined_isi`` (matches NeuralMetric Tools)
+    All electrode spike trains are merged into a single combined train.
+    ISI-threshold burst detection is run on the combined train
+    (``max_isi_s``, ``min_spikes`` refer to the combined train).
+    Detected bursts are then filtered by electrode participation.
+
+``participation_threshold``
+    Works on a discretised time grid:
+    1. For each electrode, build a binary burst mask.
+    2. Sum masks → participation count per bin.
+    3. Threshold at ``ceil(participation_threshold × n_active_electrodes)``.
+    4. Identify contiguous runs above the threshold.
+    5. Merge runs closer than *min_network_ibi_s*.
 
 Public API
 ----------
 NetworkBurst  (namedtuple)
-detect_network_bursts(well_spike_dict, well_burst_dict, ...)
+detect_network_bursts(well_burst_dict, ...)          — participation_threshold algorithm
+detect_network_bursts_combined_isi(well_spike_dict, ...)  — combined ISI algorithm
 """
 
 import math
@@ -53,6 +58,7 @@ def detect_network_bursts(
     bin_size_s: float = 0.010,
     min_network_ibi_s: float = 1.0,
     min_electrodes: int = 2,
+    extend_to_burst_envelope: bool = True,
 ) -> List[NetworkBurst]:
     """Detect network bursts across electrodes in a single well.
 
@@ -78,6 +84,13 @@ def detect_network_bursts(
         Minimum number of active electrodes required to attempt network
         burst detection.  Returns ``[]`` if fewer are present.
         Default 2.
+    extend_to_burst_envelope : bool, optional
+        If ``True`` (default), extend each detected network burst's
+        start/end times to the earliest start and latest end of all
+        electrode bursts that overlap with the participation-threshold
+        epoch.  This matches NeuralMetric Tools' convention where
+        network burst duration spans the full burst envelope rather than
+        just the high-participation core.
 
     Returns
     -------
@@ -149,6 +162,10 @@ def detect_network_bursts(
     # Build NetworkBurst namedtuples.
     network_bursts: List[NetworkBurst] = []
     for t_start, t_end in run_times:
+        # Optionally extend to the full envelope of overlapping electrode bursts.
+        if extend_to_burst_envelope:
+            t_start, t_end = _extend_to_envelope(t_start, t_end, active)
+
         participating, peak_frac = _participation_stats(
             t_start, t_end, electrode_masks, n_active, bin_size_s
         )
@@ -168,6 +185,28 @@ def detect_network_bursts(
 
 
 # ── Private helpers ───────────────────────────────────────────────────────────
+
+def _extend_to_envelope(
+    t_start: float,
+    t_end: float,
+    active: Dict[str, List[Burst]],
+) -> Tuple[float, float]:
+    """Expand [t_start, t_end] to the full extent of overlapping electrode bursts.
+
+    Any electrode burst whose interval overlaps with [t_start, t_end] is
+    included; the returned interval is the union of all such bursts.
+    """
+    env_start = t_start
+    env_end = t_end
+    for burst_list in active.values():
+        for b in burst_list:
+            if b.end_time >= t_start and b.start_time <= t_end:
+                if b.start_time < env_start:
+                    env_start = b.start_time
+                if b.end_time > env_end:
+                    env_end = b.end_time
+    return env_start, env_end
+
 
 def _find_runs(mask: np.ndarray) -> List[Tuple[int, int]]:
     """Return ``(start, end)`` index pairs for contiguous True runs.
@@ -234,3 +273,95 @@ def _participation_stats(
     peak_frac = peak_count / n_active if n_active > 0 else 0.0
 
     return sorted(participating), peak_frac
+
+
+# ── Combined-ISI algorithm (matches NeuralMetric Tools) ──────────────────────
+
+def detect_network_bursts_combined_isi(
+    well_spike_dict: Dict[str, np.ndarray],
+    total_time_s: float,
+    max_isi_s: float = 0.1,
+    min_spikes: int = 50,
+    min_ibi_s: float = 0.0,
+    participation_threshold: float = 0.35,
+    min_electrodes: int = 2,
+) -> List[NetworkBurst]:
+    """Detect network bursts using a combined-spike-train ISI threshold.
+
+    This algorithm matches **NeuralMetric Tools** behaviour:
+
+    1. All electrode spike trains are concatenated and sorted into a single
+       combined spike train.
+    2. :func:`~py_mea_axion.burst.detection.detect_bursts` (ISI-threshold) is
+       run on the combined train.  *min_spikes* and *max_isi_s* refer to the
+       **combined** train.
+    3. Each candidate is post-filtered: it is kept only if at least
+       ``ceil(participation_threshold × n_electrodes)`` individual electrodes
+       have at least one spike within the candidate window.
+
+    Parameters
+    ----------
+    well_spike_dict : dict[str, np.ndarray]
+        Mapping from electrode ID to sorted spike-time array (seconds).
+    total_time_s : float
+        Recording duration in seconds (used only for consistency with the
+        other algorithm's signature; not consumed directly here).
+    max_isi_s : float, optional
+        Maximum inter-spike interval in the combined train.  Default 0.1 s.
+    min_spikes : int, optional
+        Minimum number of spikes (across all electrodes) in a network burst.
+        Default 50, matching NeuralMetric Tools.
+    min_ibi_s : float, optional
+        Minimum inter-network-burst interval.  Default 0.0 s (no merging).
+    participation_threshold : float, optional
+        Minimum fraction of electrodes that must contribute at least one spike
+        within the burst window.  Default 0.35.
+    min_electrodes : int, optional
+        Minimum number of electrodes required.  Default 2.
+
+    Returns
+    -------
+    list of NetworkBurst
+        Detected network bursts sorted by ``start_time``.
+    """
+    from py_mea_axion.burst.detection import detect_bursts
+
+    electrodes = {eid: ts for eid, ts in well_spike_dict.items() if len(ts) > 0}
+    n_electrodes = len(electrodes)
+
+    if n_electrodes < min_electrodes:
+        return []
+
+    threshold_count = math.ceil(participation_threshold * n_electrodes)
+
+    combined = np.sort(np.concatenate(list(electrodes.values())))
+
+    candidates = detect_bursts(
+        combined, max_isi_s=max_isi_s, min_spikes=min_spikes, min_ibi_s=min_ibi_s
+    )
+
+    network_bursts: List[NetworkBurst] = []
+    for burst in candidates:
+        t_start, t_end = burst.start_time, burst.end_time
+
+        # Count participating electrodes (at least one spike in [t_start, t_end]).
+        participating = [
+            eid for eid, ts in electrodes.items()
+            if np.any((ts >= t_start) & (ts <= t_end))
+        ]
+        if len(participating) < threshold_count:
+            continue
+
+        peak_frac = len(participating) / n_electrodes
+        network_bursts.append(
+            NetworkBurst(
+                start_time=t_start,
+                end_time=t_end,
+                duration=t_end - t_start,
+                participating_electrodes=sorted(participating),
+                participation_fraction=peak_frac,
+                peak_participation=peak_frac,
+            )
+        )
+
+    return network_bursts

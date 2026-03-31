@@ -36,7 +36,11 @@ from matplotlib.figure import Figure
 
 from py_mea_axion.burst.detection import Burst, detect_bursts
 from py_mea_axion.burst.metrics import aggregate_well_bursts
-from py_mea_axion.network.detection import NetworkBurst, detect_network_bursts
+from py_mea_axion.network.detection import (
+    NetworkBurst,
+    detect_network_bursts,
+    detect_network_bursts_combined_isi,
+)
 from py_mea_axion.network.synchrony import mean_sttc, sttc_matrix
 from py_mea_axion.spike.metrics import summarise_well
 from py_mea_axion.stats.compare import CompareResult, compare_conditions, longitudinal_model
@@ -303,12 +307,22 @@ class MEAExperiment:
             self._burst_table = pd.DataFrame(columns=BURST_COLUMNS)
 
     def _step_network_bursts(self) -> None:
+        kwargs = dict(self._network_kwargs)
+        algorithm = kwargs.pop("algorithm", "combined_isi")
+
         for well_id, well_bd in self._well_bursts.items():
-            self._network_bursts_dict[well_id] = detect_network_bursts(
-                well_bd,
-                total_time_s=self._total_time_s,
-                **self._network_kwargs,
-            )
+            if algorithm == "combined_isi":
+                self._network_bursts_dict[well_id] = detect_network_bursts_combined_isi(
+                    self._spikes[well_id],
+                    total_time_s=self._total_time_s,
+                    **kwargs,
+                )
+            else:
+                self._network_bursts_dict[well_id] = detect_network_bursts(
+                    well_bd,
+                    total_time_s=self._total_time_s,
+                    **kwargs,
+                )
 
     def _step_sttc(self) -> None:
         for well_id, well_spk in self._spikes.items():
