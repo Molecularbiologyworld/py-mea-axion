@@ -6,6 +6,8 @@ version: 0.1.0
 date-released: 2026-03-31
 license: MIT
 repository-code: "https://github.com/Molecularbiologyworld/py-mea-axion"
+doi: "10.5281/zenodo.19350375"
+url: "https://doi.org/10.5281/zenodo.19350375"
 abstract: >
   py-mea-axion is an open-source Python package for end-to-end analysis
   of multi-electrode array (MEA) recordings from Axion Biosystems
