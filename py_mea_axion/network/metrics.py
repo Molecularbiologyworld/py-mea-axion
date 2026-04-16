@@ -235,7 +235,7 @@ def _nb_leader(
 def _nb_peak(
     network_bursts: List[NetworkBurst],
     well_spike_dict: Dict[str, np.ndarray],
-    bin_s: float = 0.025,
+    bin_s: float = 0.001,
 ) -> Tuple[float, float]:
     """Compute mean peak spike rate and mean time-to-peak across network bursts.
 
