@@ -74,12 +74,12 @@ TRAIN_EMPTY = np.array([], dtype=np.float64)
 class TestBurstNamedtuple:
     def test_fields(self):
         expected = ("start_time", "end_time", "spike_times",
-                    "n_spikes", "duration", "mean_isi_within")
+                    "n_spikes", "duration", "mean_isi_within", "median_isi_within")
         assert Burst._fields == expected
 
     def test_construction(self):
         spikes = np.array([0.1, 0.2, 0.3])
-        b = Burst(0.1, 0.3, spikes, 3, 0.2, 0.1)
+        b = Burst(0.1, 0.3, spikes, 3, 0.2, 0.1, 0.1)
         assert b.n_spikes == 3
         assert b.duration == pytest.approx(0.2)
 

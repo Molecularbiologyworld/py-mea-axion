@@ -70,6 +70,7 @@ def well_bursts(well_spikes):
             n_spikes=len(ts),
             duration=float(ts[-1] - ts[0]),
             mean_isi_within=float(np.diff(ts).mean()),
+            median_isi_within=float(np.median(np.diff(ts))),
         )
         bursts[eid] = [b]
     return bursts

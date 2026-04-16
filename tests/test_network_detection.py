@@ -45,6 +45,7 @@ def _burst(start, end, n=5):
         n_spikes=n,
         duration=float(end - start),
         mean_isi_within=float(np.mean(isis)),
+        median_isi_within=float(np.median(isis)),
     )
 
 

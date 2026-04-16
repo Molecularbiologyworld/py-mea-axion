@@ -35,12 +35,13 @@ import pandas as pd
 from matplotlib.figure import Figure
 
 from py_mea_axion.burst.detection import Burst, detect_bursts
-from py_mea_axion.burst.metrics import aggregate_well_bursts
+from py_mea_axion.burst.metrics import aggregate_well_bursts, well_burst_metrics
 from py_mea_axion.network.detection import (
     NetworkBurst,
     detect_network_bursts,
     detect_network_bursts_combined_isi,
 )
+from py_mea_axion.network.metrics import network_burst_metrics
 from py_mea_axion.network.synchrony import mean_sttc, sttc_matrix
 from py_mea_axion.spike.metrics import summarise_well
 from py_mea_axion.stats.compare import CompareResult, compare_conditions, longitudinal_model
@@ -383,7 +384,39 @@ class MEAExperiment:
             )
 
     def _step_well_summary(self) -> None:
-        """Build a per-well aggregate metrics DataFrame."""
+        """Build a per-well aggregate metrics DataFrame.
+
+        Columns
+        -------
+        Identity: well_id, n_electrodes
+
+        Category 1 – Activity:
+            n_spikes, n_active, mean_mfr_active_hz, weighted_mean_mfr_hz,
+            isi_cv_avg
+
+        Category 2 – Electrode burst (20 metrics):
+            n_bursts, n_bursting_electrodes, burst_duration_avg/std,
+            n_spikes_per_burst_avg/std, mean/median_isi_within_burst_avg/std,
+            median_mean_isi_ratio_burst_avg/std, ibi_avg/std,
+            burst_freq_avg/std, ibi_cv_avg/std, burst_pct_avg/std
+
+        Category 3 – Network burst (19 metrics):
+            n_network_bursts, network_burst_freq,
+            network_burst_duration_avg/std, n_spikes_per_nb_avg/std,
+            mean/median_isi_within_nb_avg/std,
+            median_mean_isi_ratio_nb_avg/std, n_elecs_per_nb_avg/std,
+            n_spikes_per_nb_per_channel_avg/std, network_burst_pct,
+            network_ibi_cv, network_normalized_duration_iqr
+
+        Category 5 – Average NB metrics:
+            nb_start_electrode, nb_pct_bursts_with_start_electrode,
+            nb_burst_peak_spikes_per_s, nb_time_to_peak_ms
+
+        Synchrony: mean_sttc
+
+        Backward-compat aliases (used by run_analysis.py):
+            mean_cv_isi, burst_rate_hz, mean_burst_duration_s
+        """
         rows = []
         for well_id in sorted(self._spikes.keys()):
             well_spk = self._spikes[well_id]
@@ -391,30 +424,43 @@ class MEAExperiment:
 
             active_mask = well_sm["is_active"]
             n_active = int(active_mask.sum())
+            active_sm = well_sm[active_mask]
 
-            mean_mfr = float(
-                well_sm.loc[active_mask, "mfr_hz"].mean()
-            ) if n_active else float("nan")
+            # ── Category 1 ────────────────────────────────────────────────────
+            n_spikes_total = int(well_sm["n_spikes"].sum())
 
-            mean_cv = float(
-                well_sm.loc[active_mask, "cv_isi"].mean()
-            ) if n_active else float("nan")
-
-            # Burst rate: bursts per electrode per second (active only).
-            bt = self._burst_table
-            well_bt = bt[bt["well_id"] == well_id] if not bt.empty else pd.DataFrame()
-            n_bursts = len(well_bt)
-            burst_rate = (
-                n_bursts / (n_active * self._total_time_s)
-                if n_active and self._total_time_s > 0
-                else float("nan")
+            mean_mfr = (
+                float(active_sm["mfr_hz"].mean()) if n_active else float("nan")
             )
-            mean_burst_dur = (
-                float(well_bt["duration"].mean()) if n_bursts else float("nan")
+            mean_cv = (
+                float(active_sm["cv_isi"].mean()) if n_active else float("nan")
             )
 
-            n_network = len(self._network_bursts_dict.get(well_id, []))
+            if n_active:
+                spk_counts = active_sm["n_spikes"].values.astype(float)
+                mfr_vals = active_sm["mfr_hz"].values
+                total_spk = spk_counts.sum()
+                weighted_mfr = (
+                    float(np.dot(mfr_vals, spk_counts) / total_spk)
+                    if total_spk > 0 else float("nan")
+                )
+            else:
+                weighted_mfr = float("nan")
 
+            # ── Category 2 ────────────────────────────────────────────────────
+            bm = well_burst_metrics(
+                self._well_bursts.get(well_id, {}),
+                self._total_time_s,
+            )
+
+            # ── Categories 3 + 5 ─────────────────────────────────────────────
+            nbm = network_burst_metrics(
+                self._network_bursts_dict.get(well_id, []),
+                well_spk,
+                self._total_time_s,
+            )
+
+            # ── Synchrony ─────────────────────────────────────────────────────
             msttc = mean_sttc(
                 well_spk,
                 dt_s=self.sttc_dt_s,
@@ -423,16 +469,33 @@ class MEAExperiment:
                 active_threshold_hz=self.active_threshold_hz,
             )
 
+            # ── Backward-compat aliases ───────────────────────────────────────
+            n_bursts_total = bm["n_bursts"]
+            burst_rate_hz = (
+                n_bursts_total / (n_active * self._total_time_s)
+                if n_active and self._total_time_s > 0
+                else float("nan")
+            )
+
             rows.append({
                 "well_id": well_id,
                 "n_electrodes": len(well_spk),
+                # Category 1
+                "n_spikes": n_spikes_total,
                 "n_active": n_active,
                 "mean_mfr_active_hz": mean_mfr,
-                "mean_cv_isi": mean_cv,
-                "burst_rate_hz": burst_rate,
-                "mean_burst_duration_s": mean_burst_dur,
-                "n_network_bursts": n_network,
+                "weighted_mean_mfr_hz": weighted_mfr,
+                "isi_cv_avg": mean_cv,
+                # Category 2
+                **bm,
+                # Categories 3 + 5
+                **nbm,
+                # Synchrony
                 "mean_sttc": msttc,
+                # Backward-compat aliases (run_analysis.py uses these)
+                "mean_cv_isi": mean_cv,
+                "burst_rate_hz": burst_rate_hz,
+                "mean_burst_duration_s": bm.get("burst_duration_avg", float("nan")),
             })
 
         self._well_summary = pd.DataFrame(rows)

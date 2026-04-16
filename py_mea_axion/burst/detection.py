@@ -36,12 +36,13 @@ from scipy.stats import poisson as _poisson_dist
 Burst = namedtuple(
     "Burst",
     [
-        "start_time",       # float  — first spike timestamp (s)
-        "end_time",         # float  — last spike timestamp (s)
-        "spike_times",      # ndarray — timestamps of all spikes in burst (s)
-        "n_spikes",         # int    — spike count
-        "duration",         # float  — end_time − start_time (s)
-        "mean_isi_within",  # float  — mean ISI within the burst (s)
+        "start_time",         # float  — first spike timestamp (s)
+        "end_time",           # float  — last spike timestamp (s)
+        "spike_times",        # ndarray — timestamps of all spikes in burst (s)
+        "n_spikes",           # int    — spike count
+        "duration",           # float  — end_time − start_time (s)
+        "mean_isi_within",    # float  — mean ISI within the burst (s)
+        "median_isi_within",  # float  — median ISI within the burst (s)
     ],
 )
 
@@ -195,6 +196,7 @@ def _make_burst(spike_times: np.ndarray, start_idx: int, end_idx: int) -> Burst:
     burst_spikes = spike_times[start_idx : end_idx + 1]
     isis = np.diff(burst_spikes)
     mean_isi = float(np.mean(isis)) if len(isis) > 0 else float("nan")
+    median_isi = float(np.median(isis)) if len(isis) > 0 else float("nan")
     return Burst(
         start_time=float(burst_spikes[0]),
         end_time=float(burst_spikes[-1]),
@@ -202,6 +204,7 @@ def _make_burst(spike_times: np.ndarray, start_idx: int, end_idx: int) -> Burst:
         n_spikes=len(burst_spikes),
         duration=float(burst_spikes[-1] - burst_spikes[0]),
         mean_isi_within=mean_isi,
+        median_isi_within=median_isi,
     )
 
 
