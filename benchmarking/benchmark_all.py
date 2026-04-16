@@ -1,9 +1,16 @@
 """
 benchmark_all.py
 ================
-Run py-mea-axion on every Plate 2 recording that has a matching
-NeuralMetric Tools CSV export, then pool the per-well results and
-report overall agreement statistics + scatter plots.
+Compare py-mea-axion output against NeuralMetric Tools exports across
+all recordings (both plates, all DIVs).
+
+Covers all metric categories implemented in the pipeline:
+  - Activity          : MFR, weighted MFR, ISI CV, active electrode count
+  - Electrode burst   : duration, spike count, ISI (mean/median/ratio),
+                        IBI, frequency, burst %, IBI CV
+  - Network burst     : count, frequency, duration, spikes, ISI, participation,
+                        burst %, IBI CV, normalised duration IQR
+  - Average NB        : peak rate, time to peak, leader-electrode %
 
 Usage
 -----
@@ -22,48 +29,147 @@ import numpy as np
 import pandas as pd
 from scipy.stats import pearsonr
 
-# ── Paths ─────────────────────────────────────────────────────────────────────
+# ── Paths ──────────────────────────────────────────────────────────────────────
 
-ROOT        = pathlib.Path(__file__).parent.parent
-SPK_DIR     = ROOT / "LGI2 KD data"
-BENCH_DIR   = pathlib.Path(__file__).parent
-OUT_DIR     = BENCH_DIR / "figures_all"
+ROOT      = pathlib.Path(__file__).parent.parent
+SPK_DIR   = ROOT / "LGI2 KD data"
+BENCH_DIR = pathlib.Path(__file__).parent
+NM_DIR    = BENCH_DIR / "neuralmetrics"
+OUT_DIR   = BENCH_DIR / "figures_all"
 OUT_DIR.mkdir(exist_ok=True)
 
-# ── Plate-2 map (fixed across all DIVs) ──────────────────────────────────────
+# ── Plate maps ─────────────────────────────────────────────────────────────────
 
+# Plate 1 — 24 wells (6 per row × 4 rows).
+# Columns 1-3 = Batch 1, columns 4-6 = Batch 2.
+_p1_rows = []
+for row in "ABCD":
+    for col, (cond, batch) in enumerate(
+        [("SCRM","B1"),("LGI2_KD4","B1"),("LGI2_KD5","B1"),
+         ("SCRM","B2"),("LGI2_KD4","B2"),("LGI2_KD5","B2")],
+        start=1,
+    ):
+        _p1_rows.append((f"{row}{col}", cond, batch))
+
+PLATE1_MAP = pd.DataFrame(_p1_rows, columns=["well_id", "condition", "batch"])
+PLATE1_WELLS = list(PLATE1_MAP["well_id"])
+
+# Plate 2 — 12 wells (3 per row × 4 rows).
 PLATE2_MAP = pd.DataFrame([
-    ("A1", "SCRM",     "rep1"),
-    ("A2", "LGI2_KD4", "rep1"),
-    ("A3", "LGI2_KD5", "rep1"),
-    ("B1", "SCRM",     "rep2"),
-    ("B2", "LGI2_KD4", "rep2"),
-    ("B3", "LGI2_KD5", "rep2"),
-    ("C1", "SCRM",     "rep3"),
-    ("C2", "LGI2_KD4", "rep3"),
-    ("C3", "LGI2_KD5", "rep3"),
-    ("D1", "SCRM",     "rep4"),
-    ("D2", "LGI2_KD4", "rep4"),
-    ("D3", "LGI2_KD5", "rep4"),
-], columns=["well_id", "condition", "replicate_id"])
+    ("A1","SCRM","B1"), ("A2","LGI2_KD4","B1"), ("A3","LGI2_KD5","B1"),
+    ("B1","SCRM","B1"), ("B2","LGI2_KD4","B1"), ("B3","LGI2_KD5","B1"),
+    ("C1","SCRM","B1"), ("C2","LGI2_KD4","B1"), ("C3","LGI2_KD5","B1"),
+    ("D1","SCRM","B1"), ("D2","LGI2_KD4","B1"), ("D3","LGI2_KD5","B1"),
+], columns=["well_id", "condition", "batch"])
+PLATE2_WELLS = list(PLATE2_MAP["well_id"])
 
-ALL_WELLS = list(PLATE2_MAP["well_id"])
+PLATE_INFO = {
+    "Plate 1": (PLATE1_MAP, PLATE1_WELLS),
+    "Plate 2": (PLATE2_MAP, PLATE2_WELLS),
+}
 
-# ── NeuralMetric CSV parser (same as benchmark_plate2_d28.py) ────────────────
+# ── Metric mapping: (label, nm_fragment, pma_column) ──────────────────────────
+#
+# nm_fragment : case-insensitive substring matched against NeuralMetric row names
+# pma_column  : column name in exp.well_summary
+
+METRIC_PAIRS = [
+    # ── Activity ──────────────────────────────────────────────────────────────
+    ("Mean MFR (Hz)",              "Mean Firing Rate (Hz)",               "mean_mfr_active_hz"),
+    ("Weighted MFR (Hz)",          "Weighted Mean Firing Rate",           "weighted_mean_mfr_hz"),
+    ("N active electrodes",        "Number of Active Electrodes",         "n_active"),
+    ("ISI CV",                     "ISI Coefficient of Variation - Avg",  "isi_cv_avg"),
+    # ── Electrode burst ───────────────────────────────────────────────────────
+    ("N bursts (total)",           "Electrode Burst Metrics / Number of Bursts",             "n_bursts"),
+    ("N bursting electrodes",      "Number of Bursting Electrodes",                          "n_bursting_electrodes"),
+    ("Burst duration avg (s)",     "Burst Duration - Avg (sec)",                             "burst_duration_avg"),
+    ("Burst duration std (s)",     "Burst Duration - Std (sec)",                             "burst_duration_std"),
+    ("Spikes/burst avg",           "Number of Spikes per Burst - Avg",                       "n_spikes_per_burst_avg"),
+    ("Spikes/burst std",           "Number of Spikes per Burst - Std",                       "n_spikes_per_burst_std"),
+    ("Mean ISI burst avg (s)",     "Mean ISI within Burst - Avg",                            "mean_isi_within_burst_avg"),
+    ("Mean ISI burst std (s)",     "Mean ISI within Burst - Std",                            "mean_isi_within_burst_std"),
+    ("Median ISI burst avg (s)",   "Median ISI within Burst - Avg",                          "median_isi_within_burst_avg"),
+    ("Median ISI burst std (s)",   "Median ISI within Burst - Std",                          "median_isi_within_burst_std"),
+    ("Median/Mean ISI burst avg",  "Median/Mean ISI within Burst - Avg",                     "median_mean_isi_ratio_burst_avg"),
+    ("Median/Mean ISI burst std",  "Median/Mean ISI within Burst - Std",                     "median_mean_isi_ratio_burst_std"),
+    ("IBI avg (s)",                "Inter-Burst Interval - Avg",                             "ibi_avg"),
+    ("IBI std (s)",                "Inter-Burst Interval - Std",                             "ibi_std"),
+    ("Burst freq avg (Hz)",        "Burst Frequency - Avg",                                  "burst_freq_avg"),
+    ("Burst freq std (Hz)",        "Burst Frequency - Std",                                  "burst_freq_std"),
+    ("IBI CV avg",                 "IBI Coefficient of Variation - Avg",                     "ibi_cv_avg"),
+    ("IBI CV std",                 "IBI Coefficient of Variation - Std",                     "ibi_cv_std"),
+    ("Burst % avg",                "Burst Percentage - Avg",                                 "burst_pct_avg"),
+    ("Burst % std",                "Burst Percentage - Std",                                 "burst_pct_std"),
+    # ── Network burst ─────────────────────────────────────────────────────────
+    ("N network bursts",           "Number of Network Bursts",                               "n_network_bursts"),
+    ("NB frequency (Hz)",          "Network Burst Frequency",                                "network_burst_freq"),
+    ("NB duration avg (s)",        "Network Burst Duration - Avg",                           "network_burst_duration_avg"),
+    ("NB duration std (s)",        "Network Burst Duration - Std",                           "network_burst_duration_std"),
+    ("Spikes/NB avg",              "Number of Spikes per Network Burst - Avg",               "n_spikes_per_nb_avg"),
+    ("Spikes/NB std",              "Number of Spikes per Network Burst - Std",               "n_spikes_per_nb_std"),
+    ("Mean ISI NB avg (s)",        "Mean ISI within Network Burst - Avg",                    "mean_isi_within_nb_avg"),
+    ("Mean ISI NB std (s)",        "Mean ISI within Network Burst - Std",                    "mean_isi_within_nb_std"),
+    ("Median ISI NB avg (s)",      "Median ISI within Network Burst - Avg",                  "median_isi_within_nb_avg"),
+    ("Median ISI NB std (s)",      "Median ISI within Network Burst - Std",                  "median_isi_within_nb_std"),
+    ("Median/Mean ISI NB avg",     "Median/Mean ISI within Network Burst - Avg",             "median_mean_isi_ratio_nb_avg"),
+    ("Median/Mean ISI NB std",     "Median/Mean ISI within Network Burst - Std",             "median_mean_isi_ratio_nb_std"),
+    ("Elecs/NB avg",               "Number of Elecs Participating in Burst - Avg",           "n_elecs_per_nb_avg"),
+    ("Elecs/NB std",               "Number of Elecs Participating in Burst - Std",           "n_elecs_per_nb_std"),
+    ("Spikes/NB/ch avg",           "Number of Spikes per Network Burst per Channel - Avg",   "n_spikes_per_nb_per_channel_avg"),
+    ("Spikes/NB/ch std",           "Number of Spikes per Network Burst per Channel - Std",   "n_spikes_per_nb_per_channel_std"),
+    ("NB % time",                  "Network Burst Percentage",                               "network_burst_pct"),
+    ("Network IBI CV",             "Network IBI Coefficient of Variation",                   "network_ibi_cv"),
+    ("Network norm. dur. IQR",     "Network Normalized Duration IQR",                        "network_normalized_duration_iqr"),
+    # ── Average NB ────────────────────────────────────────────────────────────
+    ("NB peak rate (sp/s)",        "Burst Peak (Max Spikes per sec)",                        "nb_burst_peak_spikes_per_s"),
+    ("Time to NB peak (ms)",       "Time to Burst Peak",                                     "nb_time_to_peak_ms"),
+    ("% bursts w/ lead elec",      "Percent Bursts with Start Electrode",                    "nb_pct_bursts_with_start_electrode"),
+]
+
+# Figure groups: (filename_stem, list of (label, nm_fragment, pma_col))
+FIGURE_GROUPS = [
+    ("fig1_activity", [p for p in METRIC_PAIRS if p[0] in {
+        "Mean MFR (Hz)", "Weighted MFR (Hz)", "N active electrodes", "ISI CV",
+    }]),
+    ("fig2_burst_core", [p for p in METRIC_PAIRS if p[0] in {
+        "N bursts (total)", "N bursting electrodes",
+        "Burst duration avg (s)", "Spikes/burst avg",
+        "Burst freq avg (Hz)", "Burst % avg",
+    }]),
+    ("fig3_burst_isi_ibi", [p for p in METRIC_PAIRS if p[0] in {
+        "Mean ISI burst avg (s)", "Median ISI burst avg (s)",
+        "Median/Mean ISI burst avg", "IBI avg (s)", "IBI CV avg",
+        "Burst duration std (s)",
+    }]),
+    ("fig4_nb_core", [p for p in METRIC_PAIRS if p[0] in {
+        "N network bursts", "NB frequency (Hz)",
+        "NB duration avg (s)", "Spikes/NB avg",
+        "NB % time", "Network IBI CV",
+    }]),
+    ("fig5_nb_isi_participation", [p for p in METRIC_PAIRS if p[0] in {
+        "Mean ISI NB avg (s)", "Median ISI NB avg (s)",
+        "Median/Mean ISI NB avg", "Elecs/NB avg",
+        "Spikes/NB/ch avg", "Network norm. dur. IQR",
+    }]),
+    ("fig6_avg_nb", [p for p in METRIC_PAIRS if p[0] in {
+        "NB peak rate (sp/s)", "Time to NB peak (ms)", "% bursts w/ lead elec",
+    }]),
+]
+
+# ── NeuralMetric CSV parser ────────────────────────────────────────────────────
 
 def parse_nm_csv(path: pathlib.Path) -> pd.DataFrame:
-    """Return wide DataFrame (rows=metrics, columns=well_ids A1-D6)."""
+    """Return wide DataFrame indexed by 'Section / Metric' with well IDs as columns."""
     text = path.read_text(encoding="utf-8-sig")
     lines = text.splitlines()
 
-    header_idx = next(
-        i for i, ln in enumerate(lines) if ln.startswith("Well Averages")
-    )
+    header_idx = next(i for i, ln in enumerate(lines) if ln.startswith("Well Averages"))
     well_ids = [c.strip() for c in lines[header_idx].split(",")[1:] if c.strip()]
 
     records: dict[str, list] = {}
     section = ""
     for ln in lines[header_idx + 1:]:
+        # Stop at the per-electrode section
         if re.match(r"Measurement,\w+_\d+", ln):
             break
         if not ln.startswith(" ") and not ln.startswith(","):
@@ -75,11 +181,11 @@ def parse_nm_csv(path: pathlib.Path) -> pd.DataFrame:
             continue
         metric = f"{section} / {metric_raw}" if section else metric_raw
         values = []
-        for v in parts[1: len(well_ids) + 1]:
+        for v in parts[1 : len(well_ids) + 1]:
             v = v.strip()
-            values.append(float(v) if v else None)
+            values.append(float(v) if v else np.nan)
         while len(values) < len(well_ids):
-            values.append(None)
+            values.append(np.nan)
         records[metric] = values
 
     df = pd.DataFrame(records, index=well_ids).T
@@ -89,148 +195,127 @@ def parse_nm_csv(path: pathlib.Path) -> pd.DataFrame:
 
 
 def nm_row(df: pd.DataFrame, fragment: str, wells: list[str]) -> pd.Series:
-    """Extract one metric row for the requested wells."""
+    """Extract one metric row for the requested wells (first substring match)."""
     matches = [m for m in df.index if fragment.lower() in m.lower()]
     if not matches:
         return pd.Series([np.nan] * len(wells), index=wells)
     return df.loc[matches[0], wells].astype(float)
 
 
-# ── Find matching .spk for each CSV ──────────────────────────────────────────
-
 def spk_for_csv(csv_path: pathlib.Path) -> pathlib.Path | None:
-    """Return the .spk file matching a NeuralMetric CSV, or None."""
     stem = csv_path.stem.replace("_neuralMetrics", "")
     spk = SPK_DIR / f"{stem}.spk"
     return spk if spk.exists() else None
 
 
-# ── Main loop ─────────────────────────────────────────────────────────────────
+# ── Pipeline import ────────────────────────────────────────────────────────────
 
 from py_mea_axion.pipeline import MEAExperiment  # noqa: E402
 
-csv_files = sorted(BENCH_DIR.glob("*Plate 2*_neuralMetrics.csv"))
-print(f"Found {len(csv_files)} NeuralMetric CSV files.")
+# ── Main loop ─────────────────────────────────────────────────────────────────
 
-rows = []   # one row per (recording, well)
+rows = []  # one row per (recording × well)
 
-for csv_path in csv_files:
-    spk_path = spk_for_csv(csv_path)
-    if spk_path is None:
-        print(f"  [SKIP] no .spk for {csv_path.name}")
-        continue
+for plate_label, (plate_map, plate_wells) in PLATE_INFO.items():
+    pattern = f"*{plate_label}*_neuralMetrics.csv"
+    csv_files = sorted(NM_DIR.glob(pattern))
+    print(f"\n{'='*72}")
+    print(f"{plate_label}: {len(csv_files)} NeuralMetric CSV files found.")
+    print(f"{'='*72}")
 
-    # Extract DIV from filename  e.g. "D28N" → 28
-    m = re.search(r"_D(\d+)N", csv_path.stem)
-    div = int(m.group(1)) if m else -1
+    cond_lookup = plate_map.set_index("well_id")["condition"].to_dict()
 
-    print(f"  {csv_path.stem[:40]}  DIV={div} … ", end="", flush=True)
-
-    # Parse NeuralMetric CSV
-    try:
-        nm_df = parse_nm_csv(csv_path)
-    except Exception as e:
-        print(f"NM parse error: {e}")
-        continue
-
-    nm_mfr       = nm_row(nm_df, "Weighted Mean Firing Rate", ALL_WELLS)
-    nm_n_active  = nm_row(nm_df, "Number of Active Electrodes", ALL_WELLS)
-    nm_n_bursts  = nm_row(nm_df, "Electrode Burst Metrics / Number of Bursts", ALL_WELLS)
-    nm_burst_dur = nm_row(nm_df, "Burst Duration - Avg (sec)", ALL_WELLS)
-    nm_n_nb      = nm_row(nm_df, "Number of Network Bursts", ALL_WELLS)
-    nm_nb_dur    = nm_row(nm_df, "Network Burst Duration - Avg (sec)", ALL_WELLS)
-
-    # Run py-mea-axion
-    plate_map = PLATE2_MAP.copy()
-    plate_map["DIV"] = div
-
-    try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            exp = MEAExperiment(
-                spk_path,
-                metadata=plate_map,
-                fs_override=12500,
-                active_threshold_hz=5 / 60,
-                burst_kwargs=dict(
-                    algorithm="isi_threshold",
-                    min_spikes=5,
-                    max_isi_s=0.1,
-                    min_ibi_s=0.0,
-                ),
-                network_kwargs=dict(
-                    algorithm="combined_isi",
-                    min_spikes=50,
-                    max_isi_s=0.1,
-                    participation_threshold=0.35,
-                ),
-            ).run()
-    except Exception as e:
-        print(f"pipeline error: {e}")
-        continue
-
-    ws  = exp.well_summary.set_index("well_id")
-    bt  = exp.burst_table
-    nbs = exp.network_bursts
-
-    bc  = bt.groupby("well_id").size()
-    bdc = bt.groupby("well_id")["duration"].mean()
-    nb_dur = {
-        w: float(np.mean([nb.duration for nb in nbs.get(w, [])]))
-        if nbs.get(w) else np.nan
-        for w in ALL_WELLS
-    }
-
-    for well in ALL_WELLS:
-        # Skip wells that are inactive in BOTH tools (NM n_active == 0 or NaN)
-        nm_active = nm_n_active.get(well, np.nan)
-        if pd.isna(nm_active) or nm_active == 0:
+    for csv_path in csv_files:
+        spk_path = spk_for_csv(csv_path)
+        if spk_path is None:
+            print(f"  [SKIP] no .spk for {csv_path.name}")
             continue
 
-        rows.append({
-            "recording": csv_path.stem,
-            "div":       div,
-            "well":      well,
-            "condition": PLATE2_MAP.set_index("well_id").loc[well, "condition"],
-            # NeuralMetric values
-            "nm_mfr":       nm_mfr.get(well, np.nan),
-            "nm_n_active":  nm_n_active.get(well, np.nan),
-            "nm_n_bursts":  nm_n_bursts.get(well, np.nan),
-            "nm_burst_dur": nm_burst_dur.get(well, np.nan),
-            "nm_n_nb":      nm_n_nb.get(well, np.nan),
-            "nm_nb_dur":    nm_nb_dur.get(well, np.nan),
-            # py-mea-axion values
-            "pma_mfr":       ws.loc[well, "mean_mfr_active_hz"] if well in ws.index else np.nan,
-            "pma_n_active":  ws.loc[well, "n_active"]           if well in ws.index else np.nan,
-            "pma_n_bursts":  float(bc.get(well, 0)),
-            "pma_burst_dur": float(bdc.get(well, np.nan)),
-            "pma_n_nb":      ws.loc[well, "n_network_bursts"]   if well in ws.index else np.nan,
-            "pma_nb_dur":    nb_dur[well],
-        })
+        m = re.search(r"_D(\d+)N", csv_path.stem)
+        div = int(m.group(1)) if m else -1
+        print(f"  {csv_path.stem[:50]}  DIV={div} … ", end="", flush=True)
 
-    print("done")
+        try:
+            nm_df = parse_nm_csv(csv_path)
+        except Exception as e:
+            print(f"NM parse error: {e}")
+            continue
+
+        # Pre-extract all NM metric series
+        nm_vals: dict[str, pd.Series] = {}
+        for label, nm_frag, _ in METRIC_PAIRS:
+            nm_vals[label] = nm_row(nm_df, nm_frag, plate_wells)
+
+        # Run py-mea-axion
+        meta = plate_map.copy()
+        meta["DIV"] = div
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                exp = MEAExperiment(
+                    spk_path,
+                    metadata=meta,
+                    fs_override=12500,
+                    active_threshold_hz=5 / 60,
+                    burst_kwargs=dict(
+                        algorithm="isi_threshold",
+                        min_spikes=5,
+                        max_isi_s=0.1,
+                        min_ibi_s=0.0,
+                    ),
+                    network_kwargs=dict(
+                        algorithm="combined_isi",
+                        min_spikes=50,
+                        max_isi_s=0.1,
+                        participation_threshold=0.35,
+                    ),
+                ).run()
+        except Exception as e:
+            print(f"pipeline error: {e}")
+            continue
+
+        ws = exp.well_summary.set_index("well_id")
+        nm_n_active = nm_vals["N active electrodes"]
+
+        for well in plate_wells:
+            # Skip wells inactive in NM (no reference data)
+            nm_active = nm_n_active.get(well, np.nan)
+            if pd.isna(nm_active) or nm_active == 0:
+                continue
+
+            row: dict = {
+                "recording": csv_path.stem,
+                "plate":     plate_label,
+                "div":       div,
+                "well":      well,
+                "condition": cond_lookup.get(well, ""),
+            }
+
+            for label, _, pma_col in METRIC_PAIRS:
+                row[f"nm_{label}"]  = nm_vals[label].get(well, np.nan)
+                row[f"pma_{label}"] = ws.loc[well, pma_col] if well in ws.index else np.nan
+
+            rows.append(row)
+
+        print("done")
 
 df = pd.DataFrame(rows)
-print(f"\nCollected {len(df)} active well-observations across {df['recording'].nunique()} recordings.\n")
+print(f"\nCollected {len(df)} active well-observations across "
+      f"{df['recording'].nunique()} recordings.\n")
 
-# Save raw comparison table
 df.to_csv(BENCH_DIR / "all_benchmark_raw.csv", index=False, float_format="%.6f")
+print("Raw table saved → all_benchmark_raw.csv")
 
-# ── Summary statistics ────────────────────────────────────────────────────────
-
-METRIC_PAIRS = [
-    ("MFR (Hz)",                "nm_mfr",       "pma_mfr"),
-    ("N active electrodes",     "nm_n_active",  "pma_n_active"),
-    ("N bursts",                "nm_n_bursts",  "pma_n_bursts"),
-    ("Mean burst duration (s)", "nm_burst_dur", "pma_burst_dur"),
-    ("N network bursts",        "nm_n_nb",      "pma_n_nb"),
-    ("Mean NB duration (s)",    "nm_nb_dur",    "pma_nb_dur"),
-]
+# ── Summary statistics ─────────────────────────────────────────────────────────
 
 summary_rows = []
-for label, nm_col, pma_col in METRIC_PAIRS:
+for label, _, _ in METRIC_PAIRS:
+    nm_col  = f"nm_{label}"
+    pma_col = f"pma_{label}"
+    if nm_col not in df.columns:
+        continue
     sub = df[[nm_col, pma_col]].dropna()
-    x, y = sub[nm_col].values, sub[pma_col].values
+    x, y = sub[nm_col].values.astype(float), sub[pma_col].values.astype(float)
     mask = np.isfinite(x) & np.isfinite(y)
     x, y = x[mask], y[mask]
     n = len(x)
@@ -243,29 +328,28 @@ for label, nm_col, pma_col in METRIC_PAIRS:
     bias = float(np.mean(y - x)) if n > 0 else np.nan
     summary_rows.append(dict(
         metric=label, n=n,
-        pearson_r=r, p_value=p,
-        bias=bias,
-        mean_abs_error=mae,
-        mean_pct_error=mpct,
+        pearson_r=round(r, 4) if not np.isnan(r) else np.nan,
+        p_value=round(p, 4) if not np.isnan(p) else np.nan,
+        bias=round(bias, 4) if not np.isnan(bias) else np.nan,
+        mean_abs_error=round(mae, 4) if not np.isnan(mae) else np.nan,
+        mean_pct_error=round(mpct, 2) if not np.isnan(mpct) else np.nan,
     ))
 
 summary = pd.DataFrame(summary_rows)
-summary.to_csv(BENCH_DIR / "all_benchmark_summary.csv", index=False, float_format="%.4f")
+summary.to_csv(BENCH_DIR / "all_benchmark_summary.csv", index=False)
+print("Summary saved → all_benchmark_summary.csv\n")
 
-print("=" * 72)
-print(f"{'Metric':<26} {'n':>5} {'r':>7} {'bias':>10} {'MAE':>10} {'%err':>7}")
+# Print to console
+print(f"{'Metric':<32} {'n':>5} {'r':>7} {'bias':>10} {'MAE':>10} {'%err':>7}")
 print("-" * 72)
 for _, row in summary.iterrows():
-    print(
-        f"{row['metric']:<26} {int(row['n']):>5} "
-        f"{row['pearson_r']:>7.4f} "
-        f"{row['bias']:>+10.4f} "
-        f"{row['mean_abs_error']:>10.4f} "
-        f"{row['mean_pct_error']:>6.1f}%"
-    )
-print("=" * 72)
+    r_str    = f"{row['pearson_r']:7.4f}"    if pd.notna(row['pearson_r'])    else "    n/a"
+    bias_str = f"{row['bias']:+10.4f}"       if pd.notna(row['bias'])         else "       n/a"
+    mae_str  = f"{row['mean_abs_error']:10.4f}" if pd.notna(row['mean_abs_error']) else "       n/a"
+    pct_str  = f"{row['mean_pct_error']:6.1f}%" if pd.notna(row['mean_pct_error']) else "   n/a"
+    print(f"{row['metric']:<32} {int(row['n']):>5} {r_str} {bias_str} {mae_str} {pct_str}")
 
-# ── Scatter plots ─────────────────────────────────────────────────────────────
+# ── Scatter plots ──────────────────────────────────────────────────────────────
 
 COND_COLOR = {
     "SCRM":     "#4477AA",
@@ -274,68 +358,81 @@ COND_COLOR = {
 }
 
 
-def scatter_all(nm_col, pma_col, xlabel, ylabel, title, fname):
-    sub = df[[nm_col, pma_col, "condition"]].dropna()
-    x = sub[nm_col].values.astype(float)
-    y = sub[pma_col].values.astype(float)
-    mask = np.isfinite(x) & np.isfinite(y)
-    x, y, conds = x[mask], y[mask], sub["condition"].values[mask]
+def _scatter_panel(ax, x, y, conds, label):
+    """Draw one scatter panel on *ax*."""
+    fin = np.isfinite(x) & np.isfinite(y)
+    x, y, conds = x[fin], y[fin], conds[fin]
+    if len(x) == 0:
+        ax.set_visible(False)
+        return
 
-    fig, ax = plt.subplots(figsize=(5, 5))
     lo = min(x.min(), y.min())
     hi = max(x.max(), y.max())
-    pad = (hi - lo) * 0.05
-    ax.plot([lo - pad, hi + pad], [lo - pad, hi + pad], "k--", lw=1, zorder=0)
+    pad = (hi - lo) * 0.05 or 0.05
+    ax.plot([lo - pad, hi + pad], [lo - pad, hi + pad], "k--", lw=0.8, zorder=0)
 
-    for cond in COND_COLOR:
+    for cond, col in COND_COLOR.items():
         idx = conds == cond
-        ax.scatter(x[idx], y[idx], color=COND_COLOR[cond], s=20,
-                   alpha=0.7, zorder=3, edgecolors="none", label=cond)
+        ax.scatter(x[idx], y[idx], color=col, s=10, alpha=0.65,
+                   zorder=3, edgecolors="none", label=cond)
 
     if len(x) >= 2 and x.std() > 0 and y.std() > 0:
-        r, p = pearsonr(x, y)
-        ax.text(0.05, 0.93, f"r = {r:.4f}  n = {len(x)}",
-                transform=ax.transAxes, fontsize=8, verticalalignment="top")
+        r, _ = pearsonr(x, y)
+        ax.text(0.05, 0.95, f"r={r:.3f}  n={len(x)}",
+                transform=ax.transAxes, fontsize=6, va="top")
 
-    ax.legend(fontsize=7, framealpha=0.6, markerscale=1.5)
-    ax.set_xlabel(xlabel, fontsize=9)
-    ax.set_ylabel(ylabel, fontsize=9)
-    ax.set_title(title, fontsize=10)
-    fig.tight_layout()
-    fig.savefig(OUT_DIR / fname, dpi=600)
-    plt.close(fig)
-    print(f"  saved {fname}")
+    ax.set_title(label, fontsize=7, pad=2)
+    ax.tick_params(labelsize=6)
 
 
 print("\nGenerating figures …")
-scatter_all("nm_mfr",       "pma_mfr",
-            "NeuralMetric — Weighted MFR (Hz)",
-            "py-mea-axion — Mean MFR active (Hz)",
-            "Mean firing rate", "all_mfr.png")
+for fname_stem, pairs in FIGURE_GROUPS:
+    n_panels = len(pairs)
+    if n_panels == 0:
+        continue
+    ncols = min(3, n_panels)
+    nrows = (n_panels + ncols - 1) // ncols
 
-scatter_all("nm_n_active",  "pma_n_active",
-            "NeuralMetric — N active electrodes",
-            "py-mea-axion — N active electrodes",
-            "Active electrode count", "all_n_active.png")
+    fig, axes = plt.subplots(nrows, ncols, figsize=(4 * ncols, 4 * nrows),
+                             squeeze=False)
 
-scatter_all("nm_n_bursts",  "pma_n_bursts",
-            "NeuralMetric — N bursts (electrode total)",
-            "py-mea-axion — N bursts (electrode total)",
-            "Electrode burst count", "all_n_bursts.png")
+    # One shared legend handle per condition
+    legend_handles = []
+    for cond, col in COND_COLOR.items():
+        legend_handles.append(
+            plt.Line2D([0], [0], marker="o", color="none",
+                       markerfacecolor=col, markersize=5, label=cond)
+        )
 
-scatter_all("nm_burst_dur", "pma_burst_dur",
-            "NeuralMetric — Mean burst duration (s)",
-            "py-mea-axion — Mean burst duration (s)",
-            "Mean burst duration", "all_burst_dur.png")
+    for idx, (label, _, _) in enumerate(pairs):
+        ax = axes[idx // ncols][idx % ncols]
+        nm_col  = f"nm_{label}"
+        pma_col = f"pma_{label}"
+        if nm_col not in df.columns:
+            ax.set_visible(False)
+            continue
+        sub = df[[nm_col, pma_col, "condition"]].copy()
+        _scatter_panel(
+            ax,
+            sub[nm_col].values.astype(float),
+            sub[pma_col].values.astype(float),
+            sub["condition"].values,
+            label,
+        )
+        ax.set_xlabel("NeuralMetric Tools", fontsize=6)
+        ax.set_ylabel("py-mea-axion", fontsize=6)
 
-scatter_all("nm_n_nb",      "pma_n_nb",
-            "NeuralMetric — N network bursts",
-            "py-mea-axion — N network bursts",
-            "Network burst count", "all_n_nb.png")
+    # Hide unused panels
+    for idx in range(n_panels, nrows * ncols):
+        axes[idx // ncols][idx % ncols].set_visible(False)
 
-scatter_all("nm_nb_dur",    "pma_nb_dur",
-            "NeuralMetric — Mean NB duration (s)",
-            "py-mea-axion — Mean NB duration (s)",
-            "Mean network burst duration", "all_nb_dur.png")
+    fig.legend(handles=legend_handles, loc="lower right",
+               fontsize=7, framealpha=0.7, ncol=1,
+               bbox_to_anchor=(0.98, 0.01))
+    fig.tight_layout(rect=[0, 0.03, 1, 1])
+    out_path = OUT_DIR / f"{fname_stem}.png"
+    fig.savefig(out_path, dpi=300)
+    plt.close(fig)
+    print(f"  saved {out_path.name}")
 
-print("\nDone.  Results in benchmarking/figures_all/ and benchmarking/all_benchmark_summary.csv")
+print(f"\nDone. Results in benchmarking/figures_all/ and benchmarking/all_benchmark_summary.csv")
