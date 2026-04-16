@@ -431,7 +431,7 @@ for fname_stem, pairs in FIGURE_GROUPS:
                bbox_to_anchor=(0.98, 0.01))
     fig.tight_layout(rect=[0, 0.03, 1, 1])
     out_path = OUT_DIR / f"{fname_stem}.png"
-    fig.savefig(out_path, dpi=300)
+    fig.savefig(out_path, dpi=1200)
     plt.close(fig)
     print(f"  saved {out_path.name}")
 
