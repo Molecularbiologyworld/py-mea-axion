@@ -254,8 +254,10 @@ def well_burst_metrics(
         return m, s
 
     # ── Per-electrode metrics ─────────────────────────────────────────────────
-    # Pool all IBIs across all electrodes for global avg/std.
-    all_ibis_list: List[float] = []
+    # IBI avg/std: compute per-electrode mean/std, then average across electrodes.
+    # This matches NeuralMetric (equal weight per electrode, not per IBI).
+    ibi_mean_vals: List[float] = []
+    ibi_std_vals: List[float] = []
     bf_vals: List[float] = []
     ibi_cv_vals: List[float] = []
     bpct_vals: List[float] = []
@@ -263,7 +265,12 @@ def well_burst_metrics(
     for eid in bursting_eids:
         bursts = well_burst_dict[eid]
         ibis = electrode_ibis[eid]
-        all_ibis_list.extend(ibis.tolist())
+
+        if len(ibis) >= 1:
+            ibi_mean_vals.append(float(np.mean(ibis)))
+            ibi_std_vals.append(
+                float(np.std(ibis, ddof=1)) if len(ibis) > 1 else 0.0
+            )
 
         bf_vals.append(len(bursts) / total_time_s if total_time_s > 0 else _NAN)
         spikes_in_bursts = sum(b.n_spikes for b in bursts)
@@ -284,7 +291,8 @@ def well_burst_metrics(
                 if ibi_mean > 0 else _NAN
             )
 
-    all_ibis = np.array(all_ibis_list, dtype=np.float64)
+    ibi_mean_arr = np.array(ibi_mean_vals, dtype=np.float64)
+    ibi_std_arr  = np.array(ibi_std_vals,  dtype=np.float64)
     bf_arr = np.array(bf_vals)
     bpct_arr = np.array(bpct_vals)
     icv_arr = np.array(ibi_cv_vals) if ibi_cv_vals else np.array([], dtype=np.float64)
@@ -294,7 +302,10 @@ def well_burst_metrics(
     misi_avg, misi_std = _ms(mean_isis)
     mdisi_avg, mdisi_std = _ms(median_isis)
     ratio_avg, ratio_std = _ms(ratios)
-    ibi_avg, ibi_std = _ms(all_ibis)
+    # IBI avg = mean of per-electrode mean IBIs (equal weight per electrode, matches NM)
+    # IBI std = mean of per-electrode std IBIs
+    ibi_avg = float(np.mean(ibi_mean_arr)) if len(ibi_mean_arr) > 0 else _NAN
+    ibi_std = float(np.mean(ibi_std_arr))  if len(ibi_std_arr)  > 0 else _NAN
     bf_avg, bf_std = _ms(bf_arr)
     icv_avg, icv_std = _ms(icv_arr)
     bpct_avg, bpct_std = _ms(bpct_arr)

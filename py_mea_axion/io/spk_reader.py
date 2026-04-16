@@ -566,11 +566,15 @@ def load_spikes_from_spk(
                 mask = spike_chi.astype(np.int32) == (global_ch - 1) % 256
                 buckets[eid] = list(spike_ts[mask])
 
-    # Convert lists → sorted NumPy arrays.
-    result: Dict[str, np.ndarray] = {
-        eid: np.sort(np.array(ts, dtype=np.float64))
-        for eid, ts in buckets.items()
-    }
+    # Convert lists → sorted NumPy arrays, clipping to the analysis window
+    # [0, total_time_s].  Axion recordings occasionally contain spike timestamps
+    # slightly before t=0 (pre-recording buffer artefact).  NeuralMetric Tools
+    # applies the same clip via its "Analysis Start / End" settings.
+    result: Dict[str, np.ndarray] = {}
+    for eid, ts in buckets.items():
+        arr = np.sort(np.array(ts, dtype=np.float64))
+        arr = arr[(arr >= 0.0) & (arr <= total_time_s)]
+        result[eid] = arr
 
     # Ensure every electrode for requested wells is present (even if silent).
     if channel_lookup:
