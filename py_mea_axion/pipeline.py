@@ -451,6 +451,7 @@ class MEAExperiment:
             bm = well_burst_metrics(
                 self._well_bursts.get(well_id, {}),
                 self._total_time_s,
+                well_spike_dict=well_spk,
             )
 
             # ── Categories 3 + 5 ─────────────────────────────────────────────

@@ -96,11 +96,16 @@ def network_burst_metrics(
     with np.errstate(invalid="ignore", divide="ignore"):
         ratios = np.where(mean_isis_arr > 0, median_isis_arr / mean_isis_arr, np.nan)
 
-    # ── Network burst percentage ──────────────────────────────────────────────
-    nb_pct = (
-        float(np.sum(durations) / total_time_s * 100.0)
-        if total_time_s > 0 else _NAN
-    )
+    # ── Network burst percentage (spike-based, matching NeuralMetric) ────────
+    total_spikes_all = sum(len(v) for v in well_spike_dict.values())
+    if total_spikes_all > 0:
+        spikes_in_nbs = sum(
+            len(_collect_spikes_in_window(well_spike_dict, nb.start_time, nb.end_time))
+            for nb in network_bursts
+        )
+        nb_pct = float(spikes_in_nbs / total_spikes_all * 100.0)
+    else:
+        nb_pct = _NAN
 
     # ── Network IBI CV ────────────────────────────────────────────────────────
     if n_nb > 1:

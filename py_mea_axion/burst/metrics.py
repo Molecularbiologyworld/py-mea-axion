@@ -187,6 +187,7 @@ def aggregate_well_bursts(
 def well_burst_metrics(
     well_burst_dict: Dict[str, List[Burst]],
     total_time_s: float,
+    well_spike_dict: Optional[Dict[str, np.ndarray]] = None,
 ) -> Dict[str, Any]:
     """Compute all electrode-burst summary metrics for a single well.
 
@@ -201,6 +202,11 @@ def well_burst_metrics(
         Mapping from electrode ID to its burst list.
     total_time_s : float
         Recording duration in seconds.
+    well_spike_dict : dict[str, np.ndarray], optional
+        Electrode ID → spike timestamp array for the well.  When provided,
+        ``burst_pct`` is computed as the fraction of spikes that fall inside
+        bursts (matching NeuralMetric Tools).  When omitted, falls back to
+        fraction of recording time spent in bursts.
 
     Returns
     -------
@@ -260,10 +266,17 @@ def well_burst_metrics(
         all_ibis_list.extend(ibis.tolist())
 
         bf_vals.append(len(bursts) / total_time_s if total_time_s > 0 else _NAN)
-        burst_dur_sum = sum(b.duration for b in bursts)
-        bpct_vals.append(
-            burst_dur_sum / total_time_s * 100.0 if total_time_s > 0 else _NAN
-        )
+        spikes_in_bursts = sum(b.n_spikes for b in bursts)
+        if well_spike_dict is not None:
+            total_spikes = len(well_spike_dict.get(eid, np.array([])))
+            bpct_vals.append(
+                spikes_in_bursts / total_spikes * 100.0 if total_spikes > 0 else _NAN
+            )
+        else:
+            burst_dur_sum = sum(b.duration for b in bursts)
+            bpct_vals.append(
+                burst_dur_sum / total_time_s * 100.0 if total_time_s > 0 else _NAN
+            )
         if len(ibis) > 1:
             ibi_mean = float(np.mean(ibis))
             ibi_cv_vals.append(

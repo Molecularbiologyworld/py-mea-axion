@@ -38,6 +38,7 @@ analysis/
 # Unpublished experimental data — keep off GitHub until published
 benchmarking/*_neuralMetrics.csv
 benchmarking/*_raw.csv
+benchmarking/*.log
 benchmarking/figures/
 benchmarking/figures_all/
 benchmarking/figures_plate1/
