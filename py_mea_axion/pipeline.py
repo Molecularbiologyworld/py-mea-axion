@@ -394,23 +394,19 @@ class MEAExperiment:
             n_spikes, n_active, mean_mfr_active_hz, weighted_mean_mfr_hz,
             isi_cv_avg
 
-        Category 2 – Electrode burst (20 metrics):
-            n_bursts, n_bursting_electrodes, burst_duration_avg/std,
-            n_spikes_per_burst_avg/std, mean/median_isi_within_burst_avg/std,
-            median_mean_isi_ratio_burst_avg/std, ibi_avg/std,
-            burst_freq_avg/std, ibi_cv_avg/std, burst_pct_avg/std
+        Category 2 – Electrode burst (11 metrics):
+            n_bursts, n_bursting_electrodes, burst_duration_avg,
+            n_spikes_per_burst_avg, mean_isi_within_burst_avg,
+            median_isi_within_burst_avg, median_mean_isi_ratio_burst_avg,
+            ibi_avg, burst_freq_avg, ibi_cv_avg, burst_pct_avg
 
-        Category 3 – Network burst (19 metrics):
+        Category 3 + 5 – Network burst (12 metrics):
             n_network_bursts, network_burst_freq,
-            network_burst_duration_avg/std, n_spikes_per_nb_avg/std,
-            mean/median_isi_within_nb_avg/std,
-            median_mean_isi_ratio_nb_avg/std, n_elecs_per_nb_avg/std,
-            n_spikes_per_nb_per_channel_avg/std, network_burst_pct,
-            network_ibi_cv, network_normalized_duration_iqr
-
-        Category 5 – Average NB metrics:
-            nb_start_electrode, nb_pct_bursts_with_start_electrode,
-            nb_burst_peak_spikes_per_s, nb_time_to_peak_ms
+            network_burst_duration_avg, n_spikes_per_nb_avg,
+            mean_isi_within_nb_avg, median_isi_within_nb_avg,
+            median_mean_isi_ratio_nb_avg, n_elecs_per_nb_avg,
+            n_spikes_per_nb_per_channel_avg, network_burst_pct,
+            network_ibi_cv, nb_start_electrode
 
         Synchrony: mean_sttc
 

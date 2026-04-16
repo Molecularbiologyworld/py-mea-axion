@@ -1,0 +1,27 @@
+metric,n,pearson_r,p_value,bias,mean_abs_error,mean_pct_error
+Mean MFR (Hz),946,0.999,0.0,0.1989,0.1989,92.74
+Weighted MFR (Hz),946,0.9885,0.0,0.9266,0.9266,41.68
+N active electrodes,946,1.0,0.0,0.0,0.0,0.0
+ISI CV,946,1.0,0.0,-0.0,0.0,0.0
+N bursts (total),946,1.0,0.0,0.0,0.0,0.0
+N bursting electrodes,946,1.0,0.0,0.0,0.0,0.0
+Burst duration avg (s),811,0.9934,0.0,0.0257,0.0303,7.2
+Spikes/burst avg,811,0.9986,0.0,0.797,1.9774,8.15
+Mean ISI burst avg (s),811,0.9895,0.0,-0.0001,0.0014,4.29
+Median ISI burst avg (s),811,0.9876,0.0,-0.0001,0.0016,5.58
+Median/Mean ISI burst avg,811,0.9917,0.0,-0.0027,0.012,1.45
+IBI avg (s),786,1.0,0.0,-0.6361,0.6361,4.32
+Burst freq avg (Hz),811,1.0,0.0,0.0001,0.0001,0.1
+IBI CV avg,773,0.9938,0.0,0.027,0.027,5.25
+Burst % avg,811,0.9837,0.0,6.4307,6.4307,160.88
+N network bursts,946,1.0,0.0,0.0011,0.0011,0.02
+NB frequency (Hz),688,1.0,0.0,0.0001,0.0001,0.13
+NB duration avg (s),688,1.0,0.0,-0.0001,0.0001,0.0
+Spikes/NB avg,688,1.0,0.0,-0.0034,0.0034,0.0
+Mean ISI NB avg (s),688,1.0,0.0,-0.0,0.0,0.01
+Median ISI NB avg (s),688,1.0,0.0,-0.0,0.0,0.03
+Median/Mean ISI NB avg,688,1.0,0.0,-0.0,0.0,0.0
+Elecs/NB avg,688,1.0,0.0,-0.0004,0.0004,0.01
+Spikes/NB/ch avg,688,1.0,0.0,0.0002,0.0002,0.0
+NB %,688,1.0,0.0,0.0035,0.0035,0.02
+Network IBI CV,676,0.9912,0.0,0.0234,0.0235,20.58

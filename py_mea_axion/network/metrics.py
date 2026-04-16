@@ -14,7 +14,7 @@ network_burst_metrics(network_bursts, well_spike_dict, total_time_s)
     network burst metrics for a single well.
 """
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 import numpy as np
 
@@ -46,7 +46,7 @@ def network_burst_metrics(
     Returns
     -------
     dict
-        Keys for all 19 Category-3 metrics and 4 Category-5 metrics.
+        12 keys: 11 Category-3 metrics and 1 Category-5 metric.
         ``n_network_bursts`` is always an int (0 when no network bursts).
         All other numeric values are float; NaN when undefined.
         ``nb_start_electrode`` is a string electrode ID or NaN.
@@ -59,7 +59,6 @@ def network_burst_metrics(
 
     durations = np.array([nb.duration for nb in network_bursts])
     dur_avg = float(np.mean(durations))
-    dur_std = float(np.std(durations, ddof=1)) if n_nb > 1 else 0.0
 
     # ── Per-network-burst metrics ─────────────────────────────────────────────
     n_spikes_list: List[float] = []
@@ -121,62 +120,37 @@ def network_burst_metrics(
     else:
         network_ibi_cv = _NAN
 
-    # ── Network normalised duration IQR ───────────────────────────────────────
-    if n_nb > 1:
-        mean_dur = float(np.mean(durations))
-        if mean_dur > 0:
-            q75, q25 = np.percentile(durations / mean_dur, [75, 25])
-            network_norm_dur_iqr = float(q75 - q25)
-        else:
-            network_norm_dur_iqr = _NAN
-    else:
-        network_norm_dur_iqr = _NAN
-
-    def _agg(arr: np.ndarray) -> Tuple[float, float]:
+    def _agg(arr: np.ndarray) -> float:
         valid = arr[~np.isnan(arr)]
         if len(valid) == 0:
-            return _NAN, _NAN
-        m = float(np.mean(valid))
-        s = float(np.std(valid, ddof=1)) if len(valid) > 1 else 0.0
-        return m, s
+            return _NAN
+        return float(np.mean(valid))
 
-    nspk_avg, nspk_std = _agg(n_spikes_arr)
-    misi_avg, misi_std = _agg(mean_isis_arr)
-    mdisi_avg, mdisi_std = _agg(median_isis_arr)
-    ratio_avg, ratio_std = _agg(ratios)
-    nelec_avg, nelec_std = _agg(n_elecs_arr)
-    spkch_avg, spkch_std = _agg(spk_per_ch_arr)
+    nspk_avg = _agg(n_spikes_arr)
+    misi_avg = _agg(mean_isis_arr)
+    mdisi_avg = _agg(median_isis_arr)
+    ratio_avg = _agg(ratios)
+    nelec_avg = _agg(n_elecs_arr)
+    spkch_avg = _agg(spk_per_ch_arr)
 
-    # ── Category 5: leader electrode and burst peak ───────────────────────────
-    start_elec, pct_start = _nb_leader(network_bursts, well_spike_dict)
-    peak_rate, time_to_peak = _nb_peak(network_bursts, well_spike_dict)
+    # ── Category 5: leader electrode ─────────────────────────────────────────
+    start_elec = _nb_leader(network_bursts, well_spike_dict)
 
     return {
         # Category 3
         "n_network_bursts": n_nb,
         "network_burst_freq": nb_freq,
         "network_burst_duration_avg": dur_avg,
-        "network_burst_duration_std": dur_std,
         "n_spikes_per_nb_avg": nspk_avg,
-        "n_spikes_per_nb_std": nspk_std,
         "mean_isi_within_nb_avg": misi_avg,
-        "mean_isi_within_nb_std": misi_std,
         "median_isi_within_nb_avg": mdisi_avg,
-        "median_isi_within_nb_std": mdisi_std,
         "median_mean_isi_ratio_nb_avg": ratio_avg,
-        "median_mean_isi_ratio_nb_std": ratio_std,
         "n_elecs_per_nb_avg": nelec_avg,
-        "n_elecs_per_nb_std": nelec_std,
         "n_spikes_per_nb_per_channel_avg": spkch_avg,
-        "n_spikes_per_nb_per_channel_std": spkch_std,
         "network_burst_pct": nb_pct,
         "network_ibi_cv": network_ibi_cv,
-        "network_normalized_duration_iqr": network_norm_dur_iqr,
         # Category 5
         "nb_start_electrode": start_elec,
-        "nb_pct_bursts_with_start_electrode": pct_start,
-        "nb_burst_peak_spikes_per_s": peak_rate,
-        "nb_time_to_peak_ms": time_to_peak,
     }
 
 
@@ -201,16 +175,15 @@ def _collect_spikes_in_window(
 def _nb_leader(
     network_bursts: List[NetworkBurst],
     well_spike_dict: Dict[str, np.ndarray],
-) -> Tuple[Any, float]:
+) -> Any:
     """Find the electrode that fires first most often across network bursts.
 
     Returns
     -------
-    (start_electrode_id, pct_bursts_with_start_electrode)
-        ``(nan, nan)`` when no spikes are found in any network burst.
+    start_electrode_id : str or float
+        Electrode ID string, or ``nan`` when no spikes are found in any NB.
     """
     counts: Dict[str, int] = {}
-    n_valid = 0
 
     for nb in network_bursts:
         first_t = float("inf")
@@ -222,59 +195,11 @@ def _nb_leader(
                 first_eid = eid
         if first_eid is not None:
             counts[first_eid] = counts.get(first_eid, 0) + 1
-            n_valid += 1
 
     if not counts:
-        return _NAN, _NAN
+        return _NAN
 
-    start_elec = max(counts, key=counts.__getitem__)
-    pct = counts[start_elec] / n_valid * 100.0
-    return start_elec, float(pct)
-
-
-def _nb_peak(
-    network_bursts: List[NetworkBurst],
-    well_spike_dict: Dict[str, np.ndarray],
-    bin_s: float = 0.001,
-) -> Tuple[float, float]:
-    """Compute mean peak spike rate and mean time-to-peak across network bursts.
-
-    Returns
-    -------
-    (mean_peak_spikes_per_s, mean_time_to_peak_ms)
-        Both ``nan`` when no valid network bursts are found.
-    """
-    peaks: List[float] = []
-    times: List[float] = []
-
-    for nb in network_bursts:
-        duration = nb.end_time - nb.start_time
-        if duration <= 0:
-            continue
-
-        combined = _collect_spikes_in_window(
-            well_spike_dict, nb.start_time, nb.end_time
-        )
-        if len(combined) == 0:
-            continue
-
-        n_bins = max(1, int(np.ceil(duration / bin_s)))
-        edges = np.linspace(nb.start_time, nb.end_time, n_bins + 1)
-        counts, edges_out = np.histogram(combined, bins=edges)
-        rates = counts / bin_s   # spikes per second
-
-        peak_idx = int(np.argmax(rates))
-        peak_rate = float(rates[peak_idx])
-        # Time from NB start to centre of peak bin
-        t_peak_ms = float((edges_out[peak_idx] + bin_s / 2.0 - nb.start_time) * 1000.0)
-
-        peaks.append(peak_rate)
-        times.append(t_peak_ms)
-
-    if not peaks:
-        return _NAN, _NAN
-
-    return float(np.mean(peaks)), float(np.mean(times))
+    return max(counts, key=counts.__getitem__)
 
 
 def _empty_nb_metrics() -> Dict[str, Any]:
@@ -283,24 +208,13 @@ def _empty_nb_metrics() -> Dict[str, Any]:
         "n_network_bursts": 0,
         "network_burst_freq": _NAN,
         "network_burst_duration_avg": _NAN,
-        "network_burst_duration_std": _NAN,
         "n_spikes_per_nb_avg": _NAN,
-        "n_spikes_per_nb_std": _NAN,
         "mean_isi_within_nb_avg": _NAN,
-        "mean_isi_within_nb_std": _NAN,
         "median_isi_within_nb_avg": _NAN,
-        "median_isi_within_nb_std": _NAN,
         "median_mean_isi_ratio_nb_avg": _NAN,
-        "median_mean_isi_ratio_nb_std": _NAN,
         "n_elecs_per_nb_avg": _NAN,
-        "n_elecs_per_nb_std": _NAN,
         "n_spikes_per_nb_per_channel_avg": _NAN,
-        "n_spikes_per_nb_per_channel_std": _NAN,
         "network_burst_pct": 0.0,
         "network_ibi_cv": _NAN,
-        "network_normalized_duration_iqr": _NAN,
         "nb_start_electrode": _NAN,
-        "nb_pct_bursts_with_start_electrode": _NAN,
-        "nb_burst_peak_spikes_per_s": _NAN,
-        "nb_time_to_peak_ms": _NAN,
     }
