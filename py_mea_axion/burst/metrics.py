@@ -297,40 +297,29 @@ def well_burst_metrics(
     bpct_arr = np.array(bpct_vals)
     icv_arr = np.array(ibi_cv_vals) if ibi_cv_vals else np.array([], dtype=np.float64)
 
-    dur_avg, dur_std = _ms(durations)
-    nspk_avg, nspk_std = _ms(n_spk_arr)
-    misi_avg, misi_std = _ms(mean_isis)
-    mdisi_avg, mdisi_std = _ms(median_isis)
-    ratio_avg, ratio_std = _ms(ratios)
+    dur_avg, _ = _ms(durations)
+    nspk_avg, _ = _ms(n_spk_arr)
+    misi_avg, _ = _ms(mean_isis)
+    mdisi_avg, _ = _ms(median_isis)
+    ratio_avg, _ = _ms(ratios)
     # IBI avg = mean of per-electrode mean IBIs (equal weight per electrode, matches NM)
-    # IBI std = mean of per-electrode std IBIs
     ibi_avg = float(np.mean(ibi_mean_arr)) if len(ibi_mean_arr) > 0 else _NAN
-    ibi_std = float(np.mean(ibi_std_arr))  if len(ibi_std_arr)  > 0 else _NAN
-    bf_avg, bf_std = _ms(bf_arr)
-    icv_avg, icv_std = _ms(icv_arr)
-    bpct_avg, bpct_std = _ms(bpct_arr)
+    bf_avg, _ = _ms(bf_arr)
+    icv_avg, _ = _ms(icv_arr)
+    bpct_avg, _ = _ms(bpct_arr)
 
     return {
         "n_bursts": n_bursts_total,
         "n_bursting_electrodes": n_bursting,
         "burst_duration_avg": dur_avg,
-        "burst_duration_std": dur_std,
         "n_spikes_per_burst_avg": nspk_avg,
-        "n_spikes_per_burst_std": nspk_std,
         "mean_isi_within_burst_avg": misi_avg,
-        "mean_isi_within_burst_std": misi_std,
         "median_isi_within_burst_avg": mdisi_avg,
-        "median_isi_within_burst_std": mdisi_std,
         "median_mean_isi_ratio_burst_avg": ratio_avg,
-        "median_mean_isi_ratio_burst_std": ratio_std,
         "ibi_avg": ibi_avg,
-        "ibi_std": ibi_std,
         "burst_freq_avg": bf_avg,
-        "burst_freq_std": bf_std,
         "ibi_cv_avg": icv_avg,
-        "ibi_cv_std": icv_std,
         "burst_pct_avg": bpct_avg,
-        "burst_pct_std": bpct_std,
     }
 
 
@@ -340,21 +329,12 @@ def _empty_burst_metrics() -> Dict[str, Any]:
         "n_bursts": 0,
         "n_bursting_electrodes": 0,
         "burst_duration_avg": _NAN,
-        "burst_duration_std": _NAN,
         "n_spikes_per_burst_avg": _NAN,
-        "n_spikes_per_burst_std": _NAN,
         "mean_isi_within_burst_avg": _NAN,
-        "mean_isi_within_burst_std": _NAN,
         "median_isi_within_burst_avg": _NAN,
-        "median_isi_within_burst_std": _NAN,
         "median_mean_isi_ratio_burst_avg": _NAN,
-        "median_mean_isi_ratio_burst_std": _NAN,
         "ibi_avg": _NAN,
-        "ibi_std": _NAN,
         "burst_freq_avg": _NAN,
-        "burst_freq_std": _NAN,
         "ibi_cv_avg": _NAN,
-        "ibi_cv_std": _NAN,
         "burst_pct_avg": _NAN,
-        "burst_pct_std": _NAN,
     }

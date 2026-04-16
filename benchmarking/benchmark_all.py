@@ -4,13 +4,12 @@ benchmark_all.py
 Compare py-mea-axion output against NeuralMetric Tools exports across
 all recordings (both plates, all DIVs).
 
-Covers all metric categories implemented in the pipeline:
+Covers all metric categories retained in the pipeline:
   - Activity          : MFR, weighted MFR, ISI CV, active electrode count
   - Electrode burst   : duration, spike count, ISI (mean/median/ratio),
                         IBI, frequency, burst %, IBI CV
   - Network burst     : count, frequency, duration, spikes, ISI, participation,
-                        burst %, IBI CV, normalised duration IQR
-  - Average NB        : peak rate, time to peak, leader-electrode %
+                        burst %, IBI CV
 
 Usage
 -----
@@ -40,7 +39,7 @@ OUT_DIR.mkdir(exist_ok=True)
 
 # ── Plate maps ─────────────────────────────────────────────────────────────────
 
-# Plate 1 — 24 wells (6 per row × 4 rows).
+# Plate 1 — 24 wells (6 per row x 4 rows).
 # Columns 1-3 = Batch 1, columns 4-6 = Batch 2.
 _p1_rows = []
 for row in "ABCD":
@@ -54,7 +53,7 @@ for row in "ABCD":
 PLATE1_MAP = pd.DataFrame(_p1_rows, columns=["well_id", "condition", "batch"])
 PLATE1_WELLS = list(PLATE1_MAP["well_id"])
 
-# Plate 2 — 12 wells (3 per row × 4 rows).
+# Plate 2 — 12 wells (3 per row x 4 rows).
 PLATE2_MAP = pd.DataFrame([
     ("A1","SCRM","B1"), ("A2","LGI2_KD4","B1"), ("A3","LGI2_KD5","B1"),
     ("B1","SCRM","B1"), ("B2","LGI2_KD4","B1"), ("B3","LGI2_KD5","B1"),
@@ -80,80 +79,29 @@ METRIC_PAIRS = [
     ("N active electrodes",        "Number of Active Electrodes",         "n_active"),
     ("ISI CV",                     "ISI Coefficient of Variation - Avg",  "isi_cv_avg"),
     # ── Electrode burst ───────────────────────────────────────────────────────
-    ("N bursts (total)",           "Electrode Burst Metrics / Number of Bursts",             "n_bursts"),
-    ("N bursting electrodes",      "Number of Bursting Electrodes",                          "n_bursting_electrodes"),
-    ("Burst duration avg (s)",     "Burst Duration - Avg (sec)",                             "burst_duration_avg"),
-    ("Burst duration std (s)",     "Burst Duration - Std (sec)",                             "burst_duration_std"),
-    ("Spikes/burst avg",           "Number of Spikes per Burst - Avg",                       "n_spikes_per_burst_avg"),
-    ("Spikes/burst std",           "Number of Spikes per Burst - Std",                       "n_spikes_per_burst_std"),
-    ("Mean ISI burst avg (s)",     "Mean ISI within Burst - Avg",                            "mean_isi_within_burst_avg"),
-    ("Mean ISI burst std (s)",     "Mean ISI within Burst - Std",                            "mean_isi_within_burst_std"),
-    ("Median ISI burst avg (s)",   "Median ISI within Burst - Avg",                          "median_isi_within_burst_avg"),
-    ("Median ISI burst std (s)",   "Median ISI within Burst - Std",                          "median_isi_within_burst_std"),
-    ("Median/Mean ISI burst avg",  "Median/Mean ISI within Burst - Avg",                     "median_mean_isi_ratio_burst_avg"),
-    ("Median/Mean ISI burst std",  "Median/Mean ISI within Burst - Std",                     "median_mean_isi_ratio_burst_std"),
-    ("IBI avg (s)",                "Inter-Burst Interval - Avg",                             "ibi_avg"),
-    ("IBI std (s)",                "Inter-Burst Interval - Std",                             "ibi_std"),
-    ("Burst freq avg (Hz)",        "Burst Frequency - Avg",                                  "burst_freq_avg"),
-    ("Burst freq std (Hz)",        "Burst Frequency - Std",                                  "burst_freq_std"),
-    ("IBI CV avg",                 "IBI Coefficient of Variation - Avg",                     "ibi_cv_avg"),
-    ("IBI CV std",                 "IBI Coefficient of Variation - Std",                     "ibi_cv_std"),
-    ("Burst % avg",                "Burst Percentage - Avg",                                 "burst_pct_avg"),
-    ("Burst % std",                "Burst Percentage - Std",                                 "burst_pct_std"),
+    ("N bursts (total)",           "Electrode Burst Metrics / Number of Bursts",  "n_bursts"),
+    ("N bursting electrodes",      "Number of Bursting Electrodes",               "n_bursting_electrodes"),
+    ("Burst duration avg (s)",     "Burst Duration - Avg (sec)",                  "burst_duration_avg"),
+    ("Spikes/burst avg",           "Number of Spikes per Burst - Avg",            "n_spikes_per_burst_avg"),
+    ("Mean ISI burst avg (s)",     "Mean ISI within Burst - Avg",                 "mean_isi_within_burst_avg"),
+    ("Median ISI burst avg (s)",   "Median ISI within Burst - Avg",               "median_isi_within_burst_avg"),
+    ("Median/Mean ISI burst avg",  "Median/Mean ISI within Burst - Avg",          "median_mean_isi_ratio_burst_avg"),
+    ("IBI avg (s)",                "Inter-Burst Interval - Avg",                  "ibi_avg"),
+    ("Burst freq avg (Hz)",        "Burst Frequency - Avg",                       "burst_freq_avg"),
+    ("IBI CV avg",                 "IBI Coefficient of Variation - Avg",          "ibi_cv_avg"),
+    ("Burst % avg",                "Burst Percentage - Avg",                      "burst_pct_avg"),
     # ── Network burst ─────────────────────────────────────────────────────────
     ("N network bursts",           "Number of Network Bursts",                               "n_network_bursts"),
     ("NB frequency (Hz)",          "Network Burst Frequency",                                "network_burst_freq"),
     ("NB duration avg (s)",        "Network Burst Duration - Avg",                           "network_burst_duration_avg"),
-    ("NB duration std (s)",        "Network Burst Duration - Std",                           "network_burst_duration_std"),
     ("Spikes/NB avg",              "Number of Spikes per Network Burst - Avg",               "n_spikes_per_nb_avg"),
-    ("Spikes/NB std",              "Number of Spikes per Network Burst - Std",               "n_spikes_per_nb_std"),
     ("Mean ISI NB avg (s)",        "Mean ISI within Network Burst - Avg",                    "mean_isi_within_nb_avg"),
-    ("Mean ISI NB std (s)",        "Mean ISI within Network Burst - Std",                    "mean_isi_within_nb_std"),
     ("Median ISI NB avg (s)",      "Median ISI within Network Burst - Avg",                  "median_isi_within_nb_avg"),
-    ("Median ISI NB std (s)",      "Median ISI within Network Burst - Std",                  "median_isi_within_nb_std"),
     ("Median/Mean ISI NB avg",     "Median/Mean ISI within Network Burst - Avg",             "median_mean_isi_ratio_nb_avg"),
-    ("Median/Mean ISI NB std",     "Median/Mean ISI within Network Burst - Std",             "median_mean_isi_ratio_nb_std"),
     ("Elecs/NB avg",               "Number of Elecs Participating in Burst - Avg",           "n_elecs_per_nb_avg"),
-    ("Elecs/NB std",               "Number of Elecs Participating in Burst - Std",           "n_elecs_per_nb_std"),
     ("Spikes/NB/ch avg",           "Number of Spikes per Network Burst per Channel - Avg",   "n_spikes_per_nb_per_channel_avg"),
-    ("Spikes/NB/ch std",           "Number of Spikes per Network Burst per Channel - Std",   "n_spikes_per_nb_per_channel_std"),
-    ("NB % time",                  "Network Burst Percentage",                               "network_burst_pct"),
+    ("NB %",                       "Network Burst Percentage",                               "network_burst_pct"),
     ("Network IBI CV",             "Network IBI Coefficient of Variation",                   "network_ibi_cv"),
-    ("Network norm. dur. IQR",     "Network Normalized Duration IQR",                        "network_normalized_duration_iqr"),
-    # ── Average NB ────────────────────────────────────────────────────────────
-    ("NB peak rate (sp/s)",        "Burst Peak (Max Spikes per sec)",                        "nb_burst_peak_spikes_per_s"),
-    ("Time to NB peak (ms)",       "Time to Burst Peak",                                     "nb_time_to_peak_ms"),
-    ("% bursts w/ lead elec",      "Percent Bursts with Start Electrode",                    "nb_pct_bursts_with_start_electrode"),
-]
-
-# Figure groups: (filename_stem, list of (label, nm_fragment, pma_col))
-FIGURE_GROUPS = [
-    ("fig1_activity", [p for p in METRIC_PAIRS if p[0] in {
-        "Mean MFR (Hz)", "Weighted MFR (Hz)", "N active electrodes", "ISI CV",
-    }]),
-    ("fig2_burst_core", [p for p in METRIC_PAIRS if p[0] in {
-        "N bursts (total)", "N bursting electrodes",
-        "Burst duration avg (s)", "Spikes/burst avg",
-        "Burst freq avg (Hz)", "Burst % avg",
-    }]),
-    ("fig3_burst_isi_ibi", [p for p in METRIC_PAIRS if p[0] in {
-        "Mean ISI burst avg (s)", "Median ISI burst avg (s)",
-        "Median/Mean ISI burst avg", "IBI avg (s)", "IBI CV avg",
-        "Burst duration std (s)",
-    }]),
-    ("fig4_nb_core", [p for p in METRIC_PAIRS if p[0] in {
-        "N network bursts", "NB frequency (Hz)",
-        "NB duration avg (s)", "Spikes/NB avg",
-        "NB % time", "Network IBI CV",
-    }]),
-    ("fig5_nb_isi_participation", [p for p in METRIC_PAIRS if p[0] in {
-        "Mean ISI NB avg (s)", "Median ISI NB avg (s)",
-        "Median/Mean ISI NB avg", "Elecs/NB avg",
-        "Spikes/NB/ch avg", "Network norm. dur. IQR",
-    }]),
-    ("fig6_avg_nb", [p for p in METRIC_PAIRS if p[0] in {
-        "NB peak rate (sp/s)", "Time to NB peak (ms)", "% bursts w/ lead elec",
-    }]),
 ]
 
 # ── NeuralMetric CSV parser ────────────────────────────────────────────────────
@@ -214,7 +162,7 @@ from py_mea_axion.pipeline import MEAExperiment  # noqa: E402
 
 # ── Main loop ─────────────────────────────────────────────────────────────────
 
-rows = []  # one row per (recording × well)
+rows = []  # one row per (recording x well)
 
 for plate_label, (plate_map, plate_wells) in PLATE_INFO.items():
     pattern = f"*{plate_label}*_neuralMetrics.csv"
@@ -233,7 +181,7 @@ for plate_label, (plate_map, plate_wells) in PLATE_INFO.items():
 
         m = re.search(r"_D(\d+)N", csv_path.stem)
         div = int(m.group(1)) if m else -1
-        print(f"  {csv_path.stem[:50]}  DIV={div} … ", end="", flush=True)
+        print(f"  {csv_path.stem[:50]}  DIV={div} ... ", end="", flush=True)
 
         try:
             nm_df = parse_nm_csv(csv_path)
@@ -304,7 +252,7 @@ print(f"\nCollected {len(df)} active well-observations across "
       f"{df['recording'].nunique()} recordings.\n")
 
 df.to_csv(BENCH_DIR / "all_benchmark_raw.csv", index=False, float_format="%.6f")
-print("Raw table saved → all_benchmark_raw.csv")
+print("Raw table saved -> all_benchmark_raw.csv")
 
 # ── Summary statistics ─────────────────────────────────────────────────────────
 
@@ -337,19 +285,19 @@ for label, _, _ in METRIC_PAIRS:
 
 summary = pd.DataFrame(summary_rows)
 summary.to_csv(BENCH_DIR / "all_benchmark_summary.csv", index=False)
-print("Summary saved → all_benchmark_summary.csv\n")
+print("Summary saved -> all_benchmark_summary.csv\n")
 
 # Print to console
 print(f"{'Metric':<32} {'n':>5} {'r':>7} {'bias':>10} {'MAE':>10} {'%err':>7}")
 print("-" * 72)
 for _, row in summary.iterrows():
-    r_str    = f"{row['pearson_r']:7.4f}"    if pd.notna(row['pearson_r'])    else "    n/a"
-    bias_str = f"{row['bias']:+10.4f}"       if pd.notna(row['bias'])         else "       n/a"
-    mae_str  = f"{row['mean_abs_error']:10.4f}" if pd.notna(row['mean_abs_error']) else "       n/a"
-    pct_str  = f"{row['mean_pct_error']:6.1f}%" if pd.notna(row['mean_pct_error']) else "   n/a"
+    r_str    = f"{row['pearson_r']:7.4f}"       if pd.notna(row['pearson_r'])       else "    n/a"
+    bias_str = f"{row['bias']:+10.4f}"           if pd.notna(row['bias'])            else "       n/a"
+    mae_str  = f"{row['mean_abs_error']:10.4f}"  if pd.notna(row['mean_abs_error'])  else "       n/a"
+    pct_str  = f"{row['mean_pct_error']:6.1f}%"  if pd.notna(row['mean_pct_error'])  else "   n/a"
     print(f"{row['metric']:<32} {int(row['n']):>5} {r_str} {bias_str} {mae_str} {pct_str}")
 
-# ── Scatter plots ──────────────────────────────────────────────────────────────
+# ── Individual scatter plots (one PNG per metric) ──────────────────────────────
 
 COND_COLOR = {
     "SCRM":     "#4477AA",
@@ -357,82 +305,63 @@ COND_COLOR = {
     "LGI2_KD5": "#CCBB44",
 }
 
+# Legend handles (shared across all figures)
+_legend_handles = [
+    plt.Line2D([0], [0], marker="o", color="none",
+               markerfacecolor=col, markersize=6, label=cond)
+    for cond, col in COND_COLOR.items()
+]
 
-def _scatter_panel(ax, x, y, conds, label):
-    """Draw one scatter panel on *ax*."""
-    fin = np.isfinite(x) & np.isfinite(y)
-    x, y, conds = x[fin], y[fin], conds[fin]
-    if len(x) == 0:
-        ax.set_visible(False)
-        return
-
-    lo = min(x.min(), y.min())
-    hi = max(x.max(), y.max())
-    pad = (hi - lo) * 0.05 or 0.05
-    ax.plot([lo - pad, hi + pad], [lo - pad, hi + pad], "k--", lw=0.8, zorder=0)
-
-    for cond, col in COND_COLOR.items():
-        idx = conds == cond
-        ax.scatter(x[idx], y[idx], color=col, s=10, alpha=0.65,
-                   zorder=3, edgecolors="none", label=cond)
-
-    if len(x) >= 2 and x.std() > 0 and y.std() > 0:
-        r, _ = pearsonr(x, y)
-        ax.text(0.05, 0.95, f"r={r:.3f}  n={len(x)}",
-                transform=ax.transAxes, fontsize=6, va="top")
-
-    ax.set_title(label, fontsize=7, pad=2)
-    ax.tick_params(labelsize=6)
-
-
-print("\nGenerating figures …")
-for fname_stem, pairs in FIGURE_GROUPS:
-    n_panels = len(pairs)
-    if n_panels == 0:
+print("\nGenerating individual figures ...")
+for label, _, _ in METRIC_PAIRS:
+    nm_col  = f"nm_{label}"
+    pma_col = f"pma_{label}"
+    if nm_col not in df.columns:
         continue
-    ncols = min(3, n_panels)
-    nrows = (n_panels + ncols - 1) // ncols
 
-    fig, axes = plt.subplots(nrows, ncols, figsize=(4 * ncols, 4 * nrows),
-                             squeeze=False)
+    sub = df[[nm_col, pma_col, "condition"]].copy()
+    x = sub[nm_col].values.astype(float)
+    y = sub[pma_col].values.astype(float)
+    conds = sub["condition"].values
 
-    # One shared legend handle per condition
-    legend_handles = []
-    for cond, col in COND_COLOR.items():
-        legend_handles.append(
-            plt.Line2D([0], [0], marker="o", color="none",
-                       markerfacecolor=col, markersize=5, label=cond)
-        )
+    fin = np.isfinite(x) & np.isfinite(y)
+    x_f, y_f, conds_f = x[fin], y[fin], conds[fin]
 
-    for idx, (label, _, _) in enumerate(pairs):
-        ax = axes[idx // ncols][idx % ncols]
-        nm_col  = f"nm_{label}"
-        pma_col = f"pma_{label}"
-        if nm_col not in df.columns:
-            ax.set_visible(False)
-            continue
-        sub = df[[nm_col, pma_col, "condition"]].copy()
-        _scatter_panel(
-            ax,
-            sub[nm_col].values.astype(float),
-            sub[pma_col].values.astype(float),
-            sub["condition"].values,
-            label,
-        )
-        ax.set_xlabel("NeuralMetric Tools", fontsize=6)
-        ax.set_ylabel("py-mea-axion", fontsize=6)
+    fig, ax = plt.subplots(figsize=(4, 4))
 
-    # Hide unused panels
-    for idx in range(n_panels, nrows * ncols):
-        axes[idx // ncols][idx % ncols].set_visible(False)
+    if len(x_f) > 0:
+        lo = min(x_f.min(), y_f.min())
+        hi = max(x_f.max(), y_f.max())
+        pad = (hi - lo) * 0.05 or 0.05
+        ax.plot([lo - pad, hi + pad], [lo - pad, hi + pad], "k--", lw=0.8, zorder=0)
 
-    fig.legend(handles=legend_handles, loc="lower right",
-               fontsize=7, framealpha=0.7, ncol=1,
-               bbox_to_anchor=(0.98, 0.01))
-    fig.tight_layout(rect=[0, 0.03, 1, 1])
-    out_path = OUT_DIR / f"{fname_stem}.png"
+        for cond, col in COND_COLOR.items():
+            idx = conds_f == cond
+            ax.scatter(x_f[idx], y_f[idx], color=col, s=12, alpha=0.7,
+                       zorder=3, edgecolors="none", label=cond)
+
+        if len(x_f) >= 2 and x_f.std() > 0 and y_f.std() > 0:
+            r, _ = pearsonr(x_f, y_f)
+            ax.text(0.05, 0.95, f"r={r:.3f}  n={len(x_f)}",
+                    transform=ax.transAxes, fontsize=8, va="top")
+    else:
+        ax.text(0.5, 0.5, "no data", transform=ax.transAxes,
+                ha="center", va="center", fontsize=9, color="gray")
+
+    ax.set_title(label, fontsize=9)
+    ax.set_xlabel("NeuralMetric Tools", fontsize=8)
+    ax.set_ylabel("py-mea-axion", fontsize=8)
+    ax.tick_params(labelsize=7)
+
+    ax.legend(handles=_legend_handles, loc="lower right",
+              fontsize=7, framealpha=0.7, ncol=1)
+
+    fig.tight_layout()
+    # Sanitise label for use as filename
+    safe_name = re.sub(r"[^\w\-]", "_", label).strip("_")
+    out_path = OUT_DIR / f"{safe_name}.png"
     fig.savefig(out_path, dpi=1200)
     plt.close(fig)
     print(f"  saved {out_path.name}")
 
-print(f"\nDone. Results in benchmarking/figures_all/ and benchmarking/all_benchmark_summary.csv")
+print(f"\nDone. {len(METRIC_PAIRS)} figures in benchmarking/figures_all/")
