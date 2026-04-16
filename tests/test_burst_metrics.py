@@ -28,6 +28,7 @@ def _make_burst(start, end, n=5, mean_isi=0.01):
         n_spikes=n,
         duration=end - start,
         mean_isi_within=mean_isi,
+        median_isi_within=mean_isi,
     )
 
 
