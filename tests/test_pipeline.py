@@ -125,6 +125,41 @@ class TestConstruction:
         exp.run()
         assert isinstance(exp.burst_table, pd.DataFrame)
 
+    def test_from_spikes_time_window_applied(self):
+        spikes = {
+            "A1_11": np.array([1.0, 2.0, 4.0, 5.0]),
+            "A1_12": np.array([0.5, 2.5, 4.5]),
+        }
+        exp = MEAExperiment.from_spikes(
+            spikes,
+            total_time_s=10.0,
+            time_start_s=2.0,
+            time_end_s=5.0,
+        ).run()
+
+        assert exp.total_time_s == pytest.approx(3.0)
+        assert exp.well_spikes("A1")["A1_11"].tolist() == pytest.approx([0.0, 2.0, 3.0])
+        assert exp.well_spikes("A1")["A1_12"].tolist() == pytest.approx([0.5, 2.5])
+
+    def test_from_spikes_time_window_invalid_raises(self):
+        exp = MEAExperiment.from_spikes(
+            _A1_SPIKES,
+            total_time_s=T,
+            time_start_s=40.0,
+            time_end_s=20.0,
+        )
+        with pytest.raises(ValueError, match="time_end_s"):
+            exp.run()
+
+    def test_from_spikes_time_window_start_outside_recording_raises(self):
+        exp = MEAExperiment.from_spikes(
+            _A1_SPIKES,
+            total_time_s=T,
+            time_start_s=T + 1.0,
+        )
+        with pytest.raises(ValueError, match="outside the recording"):
+            exp.run()
+
 
 # ── wells and total_time_s ────────────────────────────────────────────────────
 
@@ -192,9 +227,9 @@ class TestWellSummary:
 
     def test_columns_present(self, single_exp):
         for col in ("well_id", "n_electrodes", "n_active",
-                    "mean_mfr_active_hz", "mean_cv_isi",
-                    "burst_rate_hz", "mean_burst_duration_s",
-                    "n_network_bursts", "mean_sttc"):
+                    "mean_mfr_active_hz", "isi_cv_avg",
+                    "n_network_bursts", "network_burst_freq",
+                    "network_burst_pct", "network_ibi_cv", "mean_sttc"):
             assert col in single_exp.well_summary.columns
 
     def test_n_electrodes(self, single_exp):

@@ -10,8 +10,7 @@ the raw per-electrode spike dictionaries.
 Public API
 ----------
 network_burst_metrics(network_bursts, well_spike_dict, total_time_s)
-    Compute all Category-3 network burst metrics plus Category-5 average
-    network burst metrics for a single well.
+    Compute all retained network burst summary metrics for a single well.
 """
 
 from typing import Any, Dict, List
@@ -30,8 +29,8 @@ def network_burst_metrics(
 ) -> Dict[str, Any]:
     """Compute all network burst summary metrics for a single well.
 
-    Covers NeuralMetric Categories 3 (Network Burst Metrics) and 5
-    (Average Network Burst Metrics).
+    Covers the retained network burst summary metrics used by the
+    experiment pipeline.
 
     Parameters
     ----------
@@ -46,10 +45,9 @@ def network_burst_metrics(
     Returns
     -------
     dict
-        12 keys: 11 Category-3 metrics and 1 Category-5 metric.
+        11 retained network burst metrics.
         ``n_network_bursts`` is always an int (0 when no network bursts).
         All other numeric values are float; NaN when undefined.
-        ``nb_start_electrode`` is a string electrode ID or NaN.
     """
     if not network_bursts:
         return _empty_nb_metrics()
@@ -108,8 +106,9 @@ def network_burst_metrics(
 
     # ── Network IBI CV ────────────────────────────────────────────────────────
     if n_nb > 1:
+        # Start-to-start IBI matches NeuralMetric Tools convention.
         ibis = np.array([
-            network_bursts[i].start_time - network_bursts[i - 1].end_time
+            network_bursts[i].start_time - network_bursts[i - 1].start_time
             for i in range(1, n_nb)
         ])
         ibi_mean = float(np.mean(ibis))
@@ -134,8 +133,6 @@ def network_burst_metrics(
     spkch_avg = _agg(spk_per_ch_arr)
 
     # ── Category 5: leader electrode ─────────────────────────────────────────
-    start_elec = _nb_leader(network_bursts, well_spike_dict)
-
     return {
         # Category 3
         "n_network_bursts": n_nb,
@@ -149,8 +146,6 @@ def network_burst_metrics(
         "n_spikes_per_nb_per_channel_avg": spkch_avg,
         "network_burst_pct": nb_pct,
         "network_ibi_cv": network_ibi_cv,
-        # Category 5
-        "nb_start_electrode": start_elec,
     }
 
 
@@ -172,36 +167,6 @@ def _collect_spikes_in_window(
     return np.sort(np.concatenate(parts))
 
 
-def _nb_leader(
-    network_bursts: List[NetworkBurst],
-    well_spike_dict: Dict[str, np.ndarray],
-) -> Any:
-    """Find the electrode that fires first most often across network bursts.
-
-    Returns
-    -------
-    start_electrode_id : str or float
-        Electrode ID string, or ``nan`` when no spikes are found in any NB.
-    """
-    counts: Dict[str, int] = {}
-
-    for nb in network_bursts:
-        first_t = float("inf")
-        first_eid = None
-        for eid, ts in well_spike_dict.items():
-            in_nb = ts[(ts >= nb.start_time) & (ts <= nb.end_time)]
-            if len(in_nb) > 0 and in_nb[0] < first_t:
-                first_t = in_nb[0]
-                first_eid = eid
-        if first_eid is not None:
-            counts[first_eid] = counts.get(first_eid, 0) + 1
-
-    if not counts:
-        return _NAN
-
-    return max(counts, key=counts.__getitem__)
-
-
 def _empty_nb_metrics() -> Dict[str, Any]:
     """Return all-NaN network burst metrics for wells with no network bursts."""
     return {
@@ -216,5 +181,4 @@ def _empty_nb_metrics() -> Dict[str, Any]:
         "n_spikes_per_nb_per_channel_avg": _NAN,
         "network_burst_pct": 0.0,
         "network_ibi_cv": _NAN,
-        "nb_start_electrode": _NAN,
     }

@@ -32,7 +32,7 @@ mean_sttc(spike_dict, dt_s, total_time_s)
     Mean STTC across all electrode pairs (well-level synchrony score).
 """
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List
 
 import numpy as np
 import pandas as pd

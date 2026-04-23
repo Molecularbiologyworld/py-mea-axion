@@ -225,8 +225,9 @@ def well_burst_metrics(
         all_bursts.extend(bursts)
         bursting_eids.append(eid)
         n = len(bursts)
+        # Start-to-start IBI matches NeuralMetric Tools convention.
         electrode_ibis[eid] = np.array(
-            [bursts[i].start_time - bursts[i - 1].end_time for i in range(1, n)],
+            [bursts[i].start_time - bursts[i - 1].start_time for i in range(1, n)],
             dtype=np.float64,
         )
 
@@ -306,7 +307,13 @@ def well_burst_metrics(
     ibi_avg = float(np.mean(ibi_mean_arr)) if len(ibi_mean_arr) > 0 else _NAN
     bf_avg, _ = _ms(bf_arr)
     icv_avg, _ = _ms(icv_arr)
-    bpct_avg, _ = _ms(bpct_arr)
+    # Divide by total electrodes in well (not just bursting) to match NeuralMetric Tools.
+    if well_spike_dict is not None and len(well_spike_dict) > 0:
+        n_total_elecs = len(well_spike_dict)
+        valid_bpct = bpct_arr[np.isfinite(bpct_arr)]
+        bpct_avg = float(np.sum(valid_bpct)) / n_total_elecs if len(valid_bpct) > 0 else _NAN
+    else:
+        bpct_avg, _ = _ms(bpct_arr)
 
     return {
         "n_bursts": n_bursts_total,

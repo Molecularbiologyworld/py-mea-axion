@@ -27,11 +27,13 @@ Usage examples
 
     # Override sampling frequency for files without a BlockVectorHeader
     mea-axion run recording.spk --fs-override 12500 --out results/
+
+    # Analyse only a 5-minute window from 300 s to 600 s
+    mea-axion run recording.spk --time-start 300 --time-end 600 --out results/
 """
 
 import argparse
 import logging
-import sys
 from pathlib import Path
 from typing import List, Optional
 
@@ -101,6 +103,27 @@ def _common_args(p: argparse.ArgumentParser) -> None:
         default=0.1,
         metavar="HZ",
         help="MFR threshold (Hz) for classifying an electrode as active.  Default: 0.1.",
+    )
+    p.add_argument(
+        "--time-start",
+        type=float,
+        default=None,
+        metavar="S",
+        help=(
+            "Analysis-window start time in seconds.  Spikes before this "
+            "time are excluded, and retained timestamps are shifted so the "
+            "window starts at 0 s."
+        ),
+    )
+    p.add_argument(
+        "--time-end",
+        type=float,
+        default=None,
+        metavar="S",
+        help=(
+            "Analysis-window end time in seconds.  Spikes after this time "
+            "are excluded.  Default: use the full recording."
+        ),
     )
 
 
@@ -229,6 +252,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
         metadata=args.metadata,
         wells=args.wells,
         fs_override=args.fs_override,
+        time_start_s=args.time_start,
+        time_end_s=args.time_end,
         active_threshold_hz=args.active_threshold,
         burst_kwargs=burst_kwargs,
         sttc_dt_s=args.sttc_dt,
@@ -259,6 +284,8 @@ def _cmd_summary(args: argparse.Namespace) -> int:
         spk,
         wells=args.wells,
         fs_override=args.fs_override,
+        time_start_s=args.time_start,
+        time_end_s=args.time_end,
         active_threshold_hz=args.active_threshold,
     )
 
@@ -316,7 +343,7 @@ def _save_figures(exp, fig_dir: Path) -> None:
     if exp.metadata is not None:
         js = exp.joined_summary()
         if "condition" in js.columns and "DIV" in js.columns:
-            for metric in ("mean_mfr_active_hz", "mean_sttc", "burst_rate_hz"):
+            for metric in ("mean_mfr_active_hz", "mean_sttc", "network_burst_freq"):
                 try:
                     fig = exp.plot_trajectory(metric)
                     fig.savefig(

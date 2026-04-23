@@ -216,7 +216,7 @@ METRICS = [
     ("mean_mfr_active_hz",    "MFR (Hz)"),
     ("n_active",              "N active electrodes"),
     ("n_network_bursts",      "N network bursts"),
-    ("mean_burst_duration_s", "Mean burst duration (s)"),
+    ("burst_duration_avg",    "Mean burst duration (s)"),
 ]
 
 # Only wells with a known condition
@@ -304,4 +304,4 @@ print("  saved 06_isi_histograms.png")
 print(f"\nAll outputs written to:  {OUT_DIR}")
 print(f"\nWell summary (condition × metric):")
 print(ws[["well_id", "condition", "n_active", "mean_mfr_active_hz",
-          "n_network_bursts", "mean_burst_duration_s"]].to_string(index=False))
+          "n_network_bursts", "burst_duration_avg"]].to_string(index=False))
