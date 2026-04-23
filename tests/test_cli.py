@@ -142,6 +142,16 @@ class TestBuildParser:
         args = p.parse_args(["run", "rec.spk", "--active-threshold", "0.5"])
         assert args.active_threshold == pytest.approx(0.5)
 
+    def test_time_start(self):
+        p = build_parser()
+        args = p.parse_args(["run", "rec.spk", "--time-start", "300"])
+        assert args.time_start == pytest.approx(300.0)
+
+    def test_time_end(self):
+        p = build_parser()
+        args = p.parse_args(["summary", "rec.spk", "--time-end", "600"])
+        assert args.time_end == pytest.approx(600.0)
+
     def test_version_flag(self, capsys):
         p = build_parser()
         with pytest.raises(SystemExit):
@@ -207,6 +217,8 @@ class TestCmdRun:
             wells=None,
             fs_override=None,
             active_threshold=0.1,
+            time_start=None,
+            time_end=None,
             metadata=None,
             out=str(out_dir),
             max_isi=0.1,
@@ -222,6 +234,7 @@ class TestCmdRun:
         args = argparse.Namespace(
             spk_file=str(tmp_path / "nonexistent.spk"),
             wells=None, fs_override=None, active_threshold=0.1,
+            time_start=None, time_end=None,
             metadata=None, out=str(tmp_path / "out"),
             max_isi=0.1, min_spikes=5, sttc_dt=0.05, no_figures=True,
         )
@@ -266,6 +279,7 @@ class TestCmdRun:
         args = argparse.Namespace(
             spk_file=str(fake_spk),
             wells=None, fs_override=None, active_threshold=0.1,
+            time_start=None, time_end=None,
             metadata=None,
             out=None,                  # <-- default: derive from spk_file
             max_isi=0.1, min_spikes=5, sttc_dt=0.05, no_figures=True,
@@ -301,6 +315,7 @@ class TestCmdSummary:
         args = argparse.Namespace(
             spk_file=str(tmp_path / "nope.spk"),
             wells=None, fs_override=None, active_threshold=0.1,
+            time_start=None, time_end=None,
         )
         assert _cmd_summary(args) == 1
 
@@ -311,10 +326,10 @@ class TestCmdSummary:
             "n_active": [4],
             "mean_mfr_active_hz": [1.5],
             "mean_sttc": [0.3],
-            "burst_rate_hz": [0.1],
-            "mean_burst_duration_s": [0.5],
+            "burst_freq_avg": [0.1],
+            "burst_duration_avg": [0.5],
             "n_network_bursts": [2],
-            "mean_cv_isi": [1.2],
+            "isi_cv_avg": [1.2],
             "n_electrodes": [4],
         })
         mock_exp.run.return_value = mock_exp
@@ -323,6 +338,7 @@ class TestCmdSummary:
         args = argparse.Namespace(
             spk_file=str(fake_spk),
             wells=None, fs_override=None, active_threshold=0.1,
+            time_start=None, time_end=None,
         )
 
         with patch("py_mea_axion.cli.MEAExperiment", return_value=mock_exp):
@@ -374,10 +390,10 @@ class TestMain:
             "n_active": [4],
             "mean_mfr_active_hz": [1.5],
             "mean_sttc": [0.3],
-            "burst_rate_hz": [0.1],
-            "mean_burst_duration_s": [0.5],
+            "burst_freq_avg": [0.1],
+            "burst_duration_avg": [0.5],
             "n_network_bursts": [2],
-            "mean_cv_isi": [1.2],
+            "isi_cv_avg": [1.2],
             "n_electrodes": [4],
         })
         mock_exp.run.return_value = mock_exp

@@ -42,6 +42,7 @@ benchmarking/*.log
 benchmarking/figures/
 benchmarking/figures_all/
 benchmarking/figures_plate1/
+benchmarking/figures_plate_heatmap/
 notebooks/notebook_output/
 
 # Claude Code internals

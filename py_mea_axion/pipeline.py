@@ -73,6 +73,13 @@ class MEAExperiment:
     fs_override : float, optional
         Force a specific sampling frequency (Hz).  Passed to
         :func:`~py_mea_axion.io.spk_reader.load_spikes_from_spk`.
+    time_start_s : float, optional
+        Analysis-window start time in seconds.  Spikes earlier than this
+        are discarded.  The retained spikes are shifted so that the
+        analysis window begins at ``t=0`` internally.
+    time_end_s : float, optional
+        Analysis-window end time in seconds.  Spikes later than this are
+        discarded.  Defaults to the recording end when ``None``.
     active_threshold_hz : float, optional
         MFR threshold for classifying an electrode as active.
         Default 0.1 Hz.
@@ -129,6 +136,8 @@ class MEAExperiment:
         metadata: Optional[Union[str, Path, pd.DataFrame]] = None,
         wells: Optional[List[str]] = None,
         fs_override: Optional[float] = None,
+        time_start_s: Optional[float] = None,
+        time_end_s: Optional[float] = None,
         active_threshold_hz: float = 0.1,
         min_active_electrodes: int = 1,
         burst_kwargs: Optional[Dict[str, Any]] = None,
@@ -139,6 +148,8 @@ class MEAExperiment:
         self._metadata_source = metadata
         self._wells_filter = wells
         self._fs_override = fs_override
+        self._time_start_s = time_start_s
+        self._time_end_s = time_end_s
         self.active_threshold_hz = active_threshold_hz
         self._min_active_electrodes = min_active_electrodes
         self._burst_kwargs: Dict[str, Any] = burst_kwargs or {}
@@ -154,6 +165,8 @@ class MEAExperiment:
         spikes_flat: Dict[str, np.ndarray],
         total_time_s: float,
         metadata: Optional[Union[str, Path, pd.DataFrame]] = None,
+        time_start_s: Optional[float] = None,
+        time_end_s: Optional[float] = None,
         active_threshold_hz: float = 0.1,
         min_active_electrodes: int = 1,
         burst_kwargs: Optional[Dict[str, Any]] = None,
@@ -174,6 +187,9 @@ class MEAExperiment:
             Recording duration in seconds.
         metadata : optional
             Same as the *metadata* parameter of :class:`MEAExperiment`.
+        time_start_s, time_end_s : float, optional
+            Optional analysis window in seconds, applied to the
+            pre-loaded spike times before any metrics are computed.
 
         Returns
         -------
@@ -193,6 +209,8 @@ class MEAExperiment:
         obj._metadata_source = metadata
         obj._wells_filter = None
         obj._fs_override = None
+        obj._time_start_s = time_start_s
+        obj._time_end_s = time_end_s
         obj.active_threshold_hz = active_threshold_hz
         obj._min_active_electrodes = min_active_electrodes
         obj._burst_kwargs = burst_kwargs or {}
@@ -268,12 +286,31 @@ class MEAExperiment:
                 fs_override=self._fs_override,
             )
 
+        flat, self._total_time_s = _apply_analysis_window(
+            flat,
+            total_time_s=self._total_time_s,
+            time_start_s=self._time_start_s,
+            time_end_s=self._time_end_s,
+        )
         self._spikes = _group_by_well(flat)
         if self._wells_filter:
             self._spikes = {
                 w: v for w, v in self._spikes.items()
                 if w in self._wells_filter
             }
+        if self._time_start_s is not None or self._time_end_s is not None:
+            log.info(
+                "Applied analysis window: %.3f s to %.3f s (duration %.3f s).",
+                self._time_start_s if self._time_start_s is not None else 0.0,
+                (
+                    self._time_end_s
+                    if self._time_end_s is not None
+                    else (
+                        self._time_start_s if self._time_start_s is not None else 0.0
+                    ) + self._total_time_s
+                ),
+                self._total_time_s,
+            )
         log.info("Loaded %d wells.", len(self._spikes))
 
     def _step_load_metadata(self) -> None:
@@ -391,27 +428,21 @@ class MEAExperiment:
         Identity: well_id, n_electrodes
 
         Category 1 – Activity:
-            n_spikes, n_active, mean_mfr_active_hz, weighted_mean_mfr_hz,
-            isi_cv_avg
+            n_spikes, n_active, mean_mfr_active_hz, isi_cv_avg
 
-        Category 2 – Electrode burst (11 metrics):
-            n_bursts, n_bursting_electrodes, burst_duration_avg,
-            n_spikes_per_burst_avg, mean_isi_within_burst_avg,
-            median_isi_within_burst_avg, median_mean_isi_ratio_burst_avg,
-            ibi_avg, burst_freq_avg, ibi_cv_avg, burst_pct_avg
-
-        Category 3 + 5 – Network burst (12 metrics):
+        Category 3 + 5 – Network burst (11 metrics):
             n_network_bursts, network_burst_freq,
             network_burst_duration_avg, n_spikes_per_nb_avg,
             mean_isi_within_nb_avg, median_isi_within_nb_avg,
             median_mean_isi_ratio_nb_avg, n_elecs_per_nb_avg,
             n_spikes_per_nb_per_channel_avg, network_burst_pct,
-            network_ibi_cv, nb_start_electrode
+            network_ibi_cv
 
         Synchrony: mean_sttc
 
-        Backward-compat aliases (used by run_analysis.py):
-            mean_cv_isi, burst_rate_hz, mean_burst_duration_s
+        Note: electrode-burst metrics (burst_duration_avg, n_bursts, etc.)
+        are excluded — they depend on burst boundary decisions that cannot
+        be made to exactly match NeuralMetric Tools without its source code.
         """
         rows = []
         for well_id in sorted(self._spikes.keys()):
@@ -425,32 +456,13 @@ class MEAExperiment:
             # ── Category 1 ────────────────────────────────────────────────────
             n_spikes_total = int(well_sm["n_spikes"].sum())
 
-            mean_mfr = (
-                float(active_sm["mfr_hz"].mean()) if n_active else float("nan")
-            )
+            # Average over all electrodes to match NeuralMetric Tools convention.
+            mean_mfr = float(well_sm["mfr_hz"].mean())
             mean_cv = (
                 float(active_sm["cv_isi"].mean()) if n_active else float("nan")
             )
 
-            if n_active:
-                spk_counts = active_sm["n_spikes"].values.astype(float)
-                mfr_vals = active_sm["mfr_hz"].values
-                total_spk = spk_counts.sum()
-                weighted_mfr = (
-                    float(np.dot(mfr_vals, spk_counts) / total_spk)
-                    if total_spk > 0 else float("nan")
-                )
-            else:
-                weighted_mfr = float("nan")
-
-            # ── Category 2 ────────────────────────────────────────────────────
-            bm = well_burst_metrics(
-                self._well_bursts.get(well_id, {}),
-                self._total_time_s,
-                well_spike_dict=well_spk,
-            )
-
-            # ── Categories 3 + 5 ─────────────────────────────────────────────
+            # ── Network burst ─────────────────────────────────────────────────
             nbm = network_burst_metrics(
                 self._network_bursts_dict.get(well_id, []),
                 well_spk,
@@ -466,14 +478,6 @@ class MEAExperiment:
                 active_threshold_hz=self.active_threshold_hz,
             )
 
-            # ── Backward-compat aliases ───────────────────────────────────────
-            n_bursts_total = bm["n_bursts"]
-            burst_rate_hz = (
-                n_bursts_total / (n_active * self._total_time_s)
-                if n_active and self._total_time_s > 0
-                else float("nan")
-            )
-
             rows.append({
                 "well_id": well_id,
                 "n_electrodes": len(well_spk),
@@ -481,18 +485,11 @@ class MEAExperiment:
                 "n_spikes": n_spikes_total,
                 "n_active": n_active,
                 "mean_mfr_active_hz": mean_mfr,
-                "weighted_mean_mfr_hz": weighted_mfr,
                 "isi_cv_avg": mean_cv,
-                # Category 2
-                **bm,
-                # Categories 3 + 5
+                # Network burst
                 **nbm,
                 # Synchrony
                 "mean_sttc": msttc,
-                # Backward-compat aliases (run_analysis.py uses these)
-                "mean_cv_isi": mean_cv,
-                "burst_rate_hz": burst_rate_hz,
-                "mean_burst_duration_s": bm.get("burst_duration_avg", float("nan")),
             })
 
         self._well_summary = pd.DataFrame(rows)
@@ -528,7 +525,6 @@ class MEAExperiment:
         Columns
         -------
         well_id, n_electrodes, n_active, mean_mfr_active_hz,
-        mean_cv_isi, burst_rate_hz, mean_burst_duration_s,
         n_network_bursts, mean_sttc.
         """
         self._require_ran()
@@ -953,3 +949,68 @@ def _group_by_well(
         well_id = eid.split("_")[0]
         grouped.setdefault(well_id, {})[eid] = ts
     return grouped
+
+
+def _apply_analysis_window(
+    spikes_flat: Dict[str, np.ndarray],
+    total_time_s: float,
+    time_start_s: Optional[float],
+    time_end_s: Optional[float],
+) -> Tuple[Dict[str, np.ndarray], float]:
+    """Crop spikes to an analysis window and shift it to a zero-based timeline.
+
+    Parameters
+    ----------
+    spikes_flat : dict[str, np.ndarray]
+        Electrode ID -> spike-time array in seconds.
+    total_time_s : float
+        Full recording duration in seconds.
+    time_start_s, time_end_s : float or None
+        Requested analysis window.  ``None`` means start at 0 s / end at
+        the full recording duration.
+
+    Returns
+    -------
+    tuple[dict[str, np.ndarray], float]
+        Windowed spike dictionary plus the window duration in seconds.
+
+    Raises
+    ------
+    ValueError
+        If the requested window is invalid or empty after clipping.
+    """
+    start, end = _resolve_analysis_window(total_time_s, time_start_s, time_end_s)
+    if start == 0.0 and end == total_time_s:
+        return spikes_flat, total_time_s
+
+    shifted: Dict[str, np.ndarray] = {}
+    for eid, ts in spikes_flat.items():
+        arr = np.asarray(ts, dtype=np.float64)
+        arr = arr[(arr >= start) & (arr <= end)] - start
+        shifted[eid] = arr
+
+    return shifted, end - start
+
+
+def _resolve_analysis_window(
+    total_time_s: float,
+    time_start_s: Optional[float],
+    time_end_s: Optional[float],
+) -> Tuple[float, float]:
+    """Return the effective ``(start, end)`` analysis window in seconds."""
+    start = 0.0 if time_start_s is None else float(time_start_s)
+    end = total_time_s if time_end_s is None else float(time_end_s)
+
+    if start < 0:
+        raise ValueError("time_start_s must be >= 0.")
+    if start >= total_time_s:
+        raise ValueError(
+            f"time_start_s={start} is outside the recording duration "
+            f"(0-{total_time_s:.6f} s)."
+        )
+    if end > total_time_s:
+        end = total_time_s
+    if end <= start:
+        raise ValueError("time_end_s must be greater than time_start_s.")
+
+    return start, end

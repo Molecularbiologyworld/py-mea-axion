@@ -63,6 +63,9 @@ mea-axion run recording.spk --out results/ --no-figures --fs-override 12500
 
 # Restrict to specific wells
 mea-axion summary recording.spk --wells A1 B1 C1 --fs-override 12500
+
+# Analyse only a time window (300-600 s)
+mea-axion run recording.spk --time-start 300 --time-end 600 --out results/ --fs-override 12500
 ```
 
 Run `mea-axion --help` or `mea-axion run --help` for the full option list.
@@ -78,6 +81,8 @@ exp = MEAExperiment(
     "recording.spk",
     metadata="plate_map.csv",   # optional: well_id, condition, DIV, replicate_id
     fs_override=12500,
+    time_start_s=300.0,         # optional: crop to a time window before analysis
+    time_end_s=600.0,
     active_threshold_hz=5/60,   # 5 spikes/min, matching NeuralMetric Tools default
 ).run()
 
@@ -135,6 +140,15 @@ B2,KD,14,rep2
 | `participation_threshold` | 0.35 | Minimum fraction of electrodes that must fire |
 
 Pass these via `burst_kwargs` / `network_kwargs` in `MEAExperiment`.
+
+### Analysis window
+
+Use `time_start_s` / `time_end_s` in the Python API or
+`--time-start` / `--time-end` in the CLI to analyse only a sub-window of
+the recording. Spikes outside the window are excluded before metrics,
+burst detection, network detection, and STTC are computed. Internally,
+the retained timestamps are shifted so that the analysis window starts at
+`t=0`.
 
 ---
 

@@ -5,7 +5,7 @@ Compare py-mea-axion output against NeuralMetric Tools exports across
 all recordings (both plates, all DIVs).
 
 Covers all metric categories retained in the pipeline:
-  - Activity          : MFR, weighted MFR, ISI CV, active electrode count
+  - Activity          : MFR, ISI CV, active electrode count
   - Electrode burst   : duration, spike count, ISI (mean/median/ratio),
                         IBI, frequency, burst %, IBI CV
   - Network burst     : count, frequency, duration, spikes, ISI, participation,
@@ -35,7 +35,6 @@ SPK_DIR   = ROOT / "LGI2 KD data"
 BENCH_DIR = pathlib.Path(__file__).parent
 NM_DIR    = BENCH_DIR / "neuralmetrics"
 OUT_DIR   = BENCH_DIR / "figures_all"
-OUT_DIR.mkdir(exist_ok=True)
 
 # ── Plate maps ─────────────────────────────────────────────────────────────────
 
@@ -74,34 +73,21 @@ PLATE_INFO = {
 
 METRIC_PAIRS = [
     # ── Activity ──────────────────────────────────────────────────────────────
-    ("Mean MFR (Hz)",              "Mean Firing Rate (Hz)",               "mean_mfr_active_hz"),
-    ("Weighted MFR (Hz)",          "Weighted Mean Firing Rate",           "weighted_mean_mfr_hz"),
-    ("N active electrodes",        "Number of Active Electrodes",         "n_active"),
-    ("ISI CV",                     "ISI Coefficient of Variation - Avg",  "isi_cv_avg"),
-    # ── Electrode burst ───────────────────────────────────────────────────────
-    ("N bursts (total)",           "Electrode Burst Metrics / Number of Bursts",  "n_bursts"),
-    ("N bursting electrodes",      "Number of Bursting Electrodes",               "n_bursting_electrodes"),
-    ("Burst duration avg (s)",     "Burst Duration - Avg (sec)",                  "burst_duration_avg"),
-    ("Spikes/burst avg",           "Number of Spikes per Burst - Avg",            "n_spikes_per_burst_avg"),
-    ("Mean ISI burst avg (s)",     "Mean ISI within Burst - Avg",                 "mean_isi_within_burst_avg"),
-    ("Median ISI burst avg (s)",   "Median ISI within Burst - Avg",               "median_isi_within_burst_avg"),
-    ("Median/Mean ISI burst avg",  "Median/Mean ISI within Burst - Avg",          "median_mean_isi_ratio_burst_avg"),
-    ("IBI avg (s)",                "Inter-Burst Interval - Avg",                  "ibi_avg"),
-    ("Burst freq avg (Hz)",        "Burst Frequency - Avg",                       "burst_freq_avg"),
-    ("IBI CV avg",                 "IBI Coefficient of Variation - Avg",          "ibi_cv_avg"),
-    ("Burst % avg",                "Burst Percentage - Avg",                      "burst_pct_avg"),
+    ("Mean MFR (Hz)",          "Mean Firing Rate (Hz)",               "mean_mfr_active_hz"),
+    ("N active electrodes",    "Number of Active Electrodes",         "n_active"),
+    ("ISI CV",                 "ISI Coefficient of Variation - Avg",  "isi_cv_avg"),
     # ── Network burst ─────────────────────────────────────────────────────────
-    ("N network bursts",           "Number of Network Bursts",                               "n_network_bursts"),
-    ("NB frequency (Hz)",          "Network Burst Frequency",                                "network_burst_freq"),
-    ("NB duration avg (s)",        "Network Burst Duration - Avg",                           "network_burst_duration_avg"),
-    ("Spikes/NB avg",              "Number of Spikes per Network Burst - Avg",               "n_spikes_per_nb_avg"),
-    ("Mean ISI NB avg (s)",        "Mean ISI within Network Burst - Avg",                    "mean_isi_within_nb_avg"),
-    ("Median ISI NB avg (s)",      "Median ISI within Network Burst - Avg",                  "median_isi_within_nb_avg"),
-    ("Median/Mean ISI NB avg",     "Median/Mean ISI within Network Burst - Avg",             "median_mean_isi_ratio_nb_avg"),
-    ("Elecs/NB avg",               "Number of Elecs Participating in Burst - Avg",           "n_elecs_per_nb_avg"),
-    ("Spikes/NB/ch avg",           "Number of Spikes per Network Burst per Channel - Avg",   "n_spikes_per_nb_per_channel_avg"),
-    ("NB %",                       "Network Burst Percentage",                               "network_burst_pct"),
-    ("Network IBI CV",             "Network IBI Coefficient of Variation",                   "network_ibi_cv"),
+    ("N network bursts",       "Number of Network Bursts",                               "n_network_bursts"),
+    ("NB frequency (Hz)",      "Network Burst Frequency",                                "network_burst_freq"),
+    ("NB duration avg (s)",    "Network Burst Duration - Avg",                           "network_burst_duration_avg"),
+    ("Spikes/NB avg",          "Number of Spikes per Network Burst - Avg",               "n_spikes_per_nb_avg"),
+    ("Mean ISI NB avg (s)",    "Mean ISI within Network Burst - Avg",                    "mean_isi_within_nb_avg"),
+    ("Median ISI NB avg (s)",  "Median ISI within Network Burst - Avg",                  "median_isi_within_nb_avg"),
+    ("Median/Mean ISI NB avg", "Median/Mean ISI within Network Burst - Avg",             "median_mean_isi_ratio_nb_avg"),
+    ("Elecs/NB avg",           "Number of Elecs Participating in Burst - Avg",           "n_elecs_per_nb_avg"),
+    ("Spikes/NB/ch avg",       "Number of Spikes per Network Burst per Channel - Avg",   "n_spikes_per_nb_per_channel_avg"),
+    ("NB %",                   "Network Burst Percentage",                               "network_burst_pct"),
+    ("Network IBI CV",         "Network IBI Coefficient of Variation",                   "network_ibi_cv"),
 ]
 
 # ── NeuralMetric CSV parser ────────────────────────────────────────────────────
@@ -312,6 +298,7 @@ _legend_handles = [
     for cond, col in COND_COLOR.items()
 ]
 
+OUT_DIR.mkdir(parents=True, exist_ok=True)
 print("\nGenerating individual figures ...")
 for label, _, _ in METRIC_PAIRS:
     nm_col  = f"nm_{label}"
@@ -365,3 +352,93 @@ for label, _, _ in METRIC_PAIRS:
     print(f"  saved {out_path.name}")
 
 print(f"\nDone. {len(METRIC_PAIRS)} figures in benchmarking/figures_all/")
+
+# ── Plate heatmap figures (one per metric per DIV) ────────────────────────────
+#
+# One figure per (metric, DIV).  Each figure has two subplots side-by-side:
+#   left  = Plate 1 (4 × 6 well grid)
+#   right = Plate 2 (4 × 3 well grid)
+# Cell colour = py-mea-axion metric value.  Wells with no data (excluded /
+# inactive) are shown in grey.  Condition abbreviation is overlaid in each
+# cell.  A patch legend for conditions sits below the axes.
+
+HEATMAP_DIR = BENCH_DIR / "figures_plate_heatmap"
+HEATMAP_DIR.mkdir(parents=True, exist_ok=True)
+
+_PLATE_ROW_LABELS = list("ABCD")
+_PLATE_COLS = list(range(1, 7))   # both plates shown as full 4×6 grid
+
+_all_divs = sorted(df["div"].unique())
+
+print("\nGenerating plate heatmap figures ...")
+for label, _, _ in METRIC_PAIRS:
+    pma_col = f"pma_{label}"
+    if pma_col not in df.columns:
+        continue
+
+    _safe = re.sub(r"[^\w\-]", "_", label).strip("_")
+    _metric_dir = HEATMAP_DIR / _safe
+    _metric_dir.mkdir(parents=True, exist_ok=True)
+
+    # Global colour scale — consistent across all DIVs for this metric.
+    _vals = df[pma_col].dropna().values.astype(float)
+    _vals = _vals[np.isfinite(_vals)]
+    if len(_vals) == 0:
+        continue
+    _vmin, _vmax = float(_vals.min()), float(_vals.max())
+    if _vmin == _vmax:
+        _vmin -= 0.5; _vmax += 0.5
+
+    _norm = plt.Normalize(vmin=_vmin, vmax=_vmax)
+    _cmap = plt.cm.viridis.copy()
+    _cmap.set_bad(color="#cccccc")   # grey for empty / no-data wells
+
+    _n_r = len(_PLATE_ROW_LABELS)
+    _n_c = len(_PLATE_COLS)
+
+    for div in _all_divs:
+        fig, (ax1, ax2) = plt.subplots(
+            1, 2,
+            figsize=(13, 3.6),
+            gridspec_kw={"wspace": 0.35},
+        )
+
+        for ax, plate in [(ax1, "Plate 1"), (ax2, "Plate 2")]:
+            _pdf = df[(df["plate"] == plate) & (df["div"] == div)]
+
+            # Full 4×6 grid — wells absent from df stay NaN (shown grey).
+            _grid = np.full((_n_r, _n_c), np.nan)
+            for _, _wr in _pdf.iterrows():
+                _w = _wr["well"]
+                try:
+                    _r = _PLATE_ROW_LABELS.index(_w[0])
+                    _c = _PLATE_COLS.index(int(_w[1:]))
+                    _grid[_r, _c] = _wr[pma_col]
+                except (ValueError, IndexError):
+                    pass
+
+            ax.imshow(_grid, norm=_norm, cmap=_cmap, aspect="auto")
+            ax.set_xticks(range(_n_c))
+            ax.set_xticklabels(_PLATE_COLS, fontsize=8)
+            ax.set_yticks(range(_n_r))
+            ax.set_yticklabels(_PLATE_ROW_LABELS, fontsize=8)
+            ax.tick_params(length=2, pad=2)
+            ax.set_title(plate, fontsize=9, pad=4)
+
+        # Colorbar.
+        _sm = plt.cm.ScalarMappable(norm=_norm, cmap=_cmap)
+        _sm.set_array([])
+        _cb = fig.colorbar(_sm, ax=[ax1, ax2], fraction=0.025, pad=0.04)
+        _cb.set_label(label, fontsize=8)
+        _cb.ax.tick_params(labelsize=7)
+
+        fig.suptitle(f"{label} — DIV {div}", fontsize=10, y=1.02)
+        fig.tight_layout()
+
+        _out = _metric_dir / f"DIV_{div:02d}.png"
+        fig.savefig(_out, dpi=200, bbox_inches="tight")
+        plt.close(fig)
+
+    print(f"  {label}: {len(_all_divs)} figures -> {_metric_dir.name}/")
+
+print(f"\nDone. Plate heatmap figures in benchmarking/figures_plate_heatmap/")
