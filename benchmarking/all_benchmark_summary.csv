@@ -2,6 +2,17 @@ metric,n,pearson_r,p_value,bias,mean_abs_error,mean_pct_error
 Mean MFR (Hz),946,1.0,0.0,0.0034,0.0034,0.1
 N active electrodes,946,1.0,0.0,0.0,0.0,0.0
 ISI CV,946,1.0,0.0,-0.0,0.0,0.0
+N bursts,946,1.0,0.0,0.0,0.0,0.0
+N bursting electrodes,946,1.0,0.0,0.0,0.0,0.0
+Burst duration avg (s),811,1.0,0.0,0.0,0.0,0.0
+Spikes/burst avg,811,1.0,0.0,-0.0,0.0,0.0
+Mean ISI burst avg (s),811,1.0,0.0,-0.0,0.0,0.0
+Median ISI burst avg (s),811,1.0,0.0,0.0,0.0,0.0
+Median/Mean ISI burst,811,1.0,0.0,-0.0,0.0,0.0
+IBI avg (s),786,1.0,0.0,0.0,0.0,0.0
+Burst freq avg (Hz),811,1.0,0.0,0.0001,0.0001,0.1
+IBI CV avg,773,1.0,0.0,0.0,0.0,0.0
+Burst % avg,811,0.9989,0.0,-0.9879,0.9879,5.83
 N network bursts,946,1.0,0.0,0.0011,0.0011,0.02
 NB frequency (Hz),688,1.0,0.0,0.0001,0.0001,0.13
 NB duration avg (s),688,1.0,0.0,-0.0001,0.0001,0.0

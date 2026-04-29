@@ -430,6 +430,12 @@ class MEAExperiment:
         Category 1 – Activity:
             n_spikes, n_active, mean_mfr_active_hz, isi_cv_avg
 
+        Category 2 – Electrode burst (11 metrics):
+            n_bursts, n_bursting_electrodes, burst_duration_avg,
+            n_spikes_per_burst_avg, mean_isi_within_burst_avg,
+            median_isi_within_burst_avg, median_mean_isi_ratio_burst_avg,
+            ibi_avg, burst_freq_avg, ibi_cv_avg, burst_pct_avg
+
         Category 3 + 5 – Network burst (11 metrics):
             n_network_bursts, network_burst_freq,
             network_burst_duration_avg, n_spikes_per_nb_avg,
@@ -439,10 +445,6 @@ class MEAExperiment:
             network_ibi_cv
 
         Synchrony: mean_sttc
-
-        Note: electrode-burst metrics (burst_duration_avg, n_bursts, etc.)
-        are excluded — they depend on burst boundary decisions that cannot
-        be made to exactly match NeuralMetric Tools without its source code.
         """
         rows = []
         for well_id in sorted(self._spikes.keys()):
@@ -460,6 +462,13 @@ class MEAExperiment:
             mean_mfr = float(well_sm["mfr_hz"].mean())
             mean_cv = (
                 float(active_sm["cv_isi"].mean()) if n_active else float("nan")
+            )
+
+            # ── Category 2 – Electrode burst ──────────────────────────────────
+            ebm = well_burst_metrics(
+                self._well_bursts.get(well_id, {}),
+                self._total_time_s,
+                well_spk,
             )
 
             # ── Network burst ─────────────────────────────────────────────────
@@ -486,6 +495,8 @@ class MEAExperiment:
                 "n_active": n_active,
                 "mean_mfr_active_hz": mean_mfr,
                 "isi_cv_avg": mean_cv,
+                # Category 2
+                **ebm,
                 # Network burst
                 **nbm,
                 # Synchrony
@@ -524,8 +535,16 @@ class MEAExperiment:
 
         Columns
         -------
-        well_id, n_electrodes, n_active, mean_mfr_active_hz,
-        n_network_bursts, mean_sttc.
+        well_id, n_electrodes, n_spikes, n_active, mean_mfr_active_hz,
+        isi_cv_avg, n_bursts, n_bursting_electrodes, burst_duration_avg,
+        n_spikes_per_burst_avg, mean_isi_within_burst_avg,
+        median_isi_within_burst_avg, median_mean_isi_ratio_burst_avg,
+        ibi_avg, burst_freq_avg, ibi_cv_avg, burst_pct_avg,
+        n_network_bursts, network_burst_freq, network_burst_duration_avg,
+        n_spikes_per_nb_avg, mean_isi_within_nb_avg, median_isi_within_nb_avg,
+        median_mean_isi_ratio_nb_avg, n_elecs_per_nb_avg,
+        n_spikes_per_nb_per_channel_avg, network_burst_pct, network_ibi_cv,
+        mean_sttc.
         """
         self._require_ran()
         return self._well_summary  # type: ignore[return-value]
@@ -785,6 +804,10 @@ class MEAExperiment:
         matplotlib.figure.Figure
         """
         self._require_ran()
+        kwargs.setdefault(
+            "network_burst_list",
+            self._network_bursts_dict.get(well_id, []),
+        )
         return plot_burst_raster(
             self.well_spikes(well_id),
             self.well_burst_dict(well_id),

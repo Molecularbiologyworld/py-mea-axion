@@ -237,13 +237,9 @@ def well_burst_metrics(
     n_bursts_total = len(all_bursts)
     n_bursting = len(bursting_eids)
 
-    # ── Pool burst-level scalars across all electrodes ────────────────────────
-    durations = np.array([b.duration for b in all_bursts])
-    n_spk_arr = np.array([b.n_spikes for b in all_bursts], dtype=float)
-    mean_isis = np.array([b.mean_isi_within for b in all_bursts])
-    median_isis = np.array([b.median_isi_within for b in all_bursts])
-    with np.errstate(invalid="ignore", divide="ignore"):
-        ratios = np.where(mean_isis > 0, median_isis / mean_isis, np.nan)
+    def _nanmean(vals: List[float]) -> float:
+        arr = np.array([v for v in vals if not np.isnan(v)], dtype=np.float64)
+        return float(np.mean(arr)) if len(arr) > 0 else _NAN
 
     def _ms(arr: np.ndarray) -> tuple:
         """(mean, std) ignoring NaN; std=0 when only one valid value."""
@@ -255,8 +251,14 @@ def well_burst_metrics(
         return m, s
 
     # ── Per-electrode metrics ─────────────────────────────────────────────────
-    # IBI avg/std: compute per-electrode mean/std, then average across electrodes.
-    # This matches NeuralMetric (equal weight per electrode, not per IBI).
+    # All burst-level scalars are averaged per-electrode first, then across
+    # electrodes (equal weight per electrode).  This matches NeuralMetric Tools
+    # convention — the same approach already used for IBI and burst frequency.
+    dur_vals: List[float] = []
+    nspk_vals: List[float] = []
+    misi_vals: List[float] = []
+    mdisi_vals: List[float] = []
+    ratio_vals: List[float] = []
     ibi_mean_vals: List[float] = []
     ibi_std_vals: List[float] = []
     bf_vals: List[float] = []
@@ -266,6 +268,17 @@ def well_burst_metrics(
     for eid in bursting_eids:
         bursts = well_burst_dict[eid]
         ibis = electrode_ibis[eid]
+
+        dur_vals.append(float(np.mean([b.duration for b in bursts])))
+        nspk_vals.append(float(np.mean([b.n_spikes for b in bursts])))
+        misi_vals.append(float(np.mean([b.mean_isi_within for b in bursts])))
+        mdisi_vals.append(float(np.mean([b.median_isi_within for b in bursts])))
+        e_misi = np.array([b.mean_isi_within for b in bursts])
+        e_mdisi = np.array([b.median_isi_within for b in bursts])
+        with np.errstate(invalid="ignore", divide="ignore"):
+            e_ratios = np.where(e_misi > 0, e_mdisi / e_misi, np.nan)
+        valid_r = e_ratios[~np.isnan(e_ratios)]
+        ratio_vals.append(float(np.mean(valid_r)) if len(valid_r) > 0 else _NAN)
 
         if len(ibis) >= 1:
             ibi_mean_vals.append(float(np.mean(ibis)))
@@ -293,16 +306,15 @@ def well_burst_metrics(
             )
 
     ibi_mean_arr = np.array(ibi_mean_vals, dtype=np.float64)
-    ibi_std_arr  = np.array(ibi_std_vals,  dtype=np.float64)
     bf_arr = np.array(bf_vals)
     bpct_arr = np.array(bpct_vals)
     icv_arr = np.array(ibi_cv_vals) if ibi_cv_vals else np.array([], dtype=np.float64)
 
-    dur_avg, _ = _ms(durations)
-    nspk_avg, _ = _ms(n_spk_arr)
-    misi_avg, _ = _ms(mean_isis)
-    mdisi_avg, _ = _ms(median_isis)
-    ratio_avg, _ = _ms(ratios)
+    dur_avg   = _nanmean(dur_vals)
+    nspk_avg  = _nanmean(nspk_vals)
+    misi_avg  = _nanmean(misi_vals)
+    mdisi_avg = _nanmean(mdisi_vals)
+    ratio_avg = _nanmean(ratio_vals)
     # IBI avg = mean of per-electrode mean IBIs (equal weight per electrode, matches NM)
     ibi_avg = float(np.mean(ibi_mean_arr)) if len(ibi_mean_arr) > 0 else _NAN
     bf_avg, _ = _ms(bf_arr)

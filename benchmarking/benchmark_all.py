@@ -76,6 +76,18 @@ METRIC_PAIRS = [
     ("Mean MFR (Hz)",          "Mean Firing Rate (Hz)",               "mean_mfr_active_hz"),
     ("N active electrodes",    "Number of Active Electrodes",         "n_active"),
     ("ISI CV",                 "ISI Coefficient of Variation - Avg",  "isi_cv_avg"),
+    # ── Electrode burst ───────────────────────────────────────────────────────
+    ("N bursts",               "Electrode Burst Metrics / Number of Bursts",  "n_bursts"),
+    ("N bursting electrodes",  "Number of Bursting Electrodes",               "n_bursting_electrodes"),
+    ("Burst duration avg (s)", "Burst Duration - Avg",                        "burst_duration_avg"),
+    ("Spikes/burst avg",       "Number of Spikes per Burst - Avg",            "n_spikes_per_burst_avg"),
+    ("Mean ISI burst avg (s)", "Mean ISI within Burst - Avg",                 "mean_isi_within_burst_avg"),
+    ("Median ISI burst avg (s)", "Median ISI within Burst - Avg",             "median_isi_within_burst_avg"),
+    ("Median/Mean ISI burst",  "Median/Mean ISI within Burst - Avg",          "median_mean_isi_ratio_burst_avg"),
+    ("IBI avg (s)",            "Inter-Burst Interval - Avg",                  "ibi_avg"),
+    ("Burst freq avg (Hz)",    "Burst Frequency - Avg",                       "burst_freq_avg"),
+    ("IBI CV avg",             "IBI Coefficient of Variation - Avg",          "ibi_cv_avg"),
+    ("Burst % avg",            "Burst Percentage - Avg",                      "burst_pct_avg"),
     # ── Network burst ─────────────────────────────────────────────────────────
     ("N network bursts",       "Number of Network Bursts",                               "n_network_bursts"),
     ("NB frequency (Hz)",      "Network Burst Frequency",                                "network_burst_freq"),
@@ -287,14 +299,15 @@ for _, row in summary.iterrows():
 
 COND_COLOR = {
     "SCRM":     "#4477AA",
-    "LGI2_KD4": "#EE6677",
-    "LGI2_KD5": "#CCBB44",
+    "LGI2_KD4": "#CC3311",
+    "LGI2_KD5": "#EE9988",
 }
 
-# Legend handles (shared across all figures)
+# Legend handles (shared across all figures) — open circles matching scatter style
 _legend_handles = [
     plt.Line2D([0], [0], marker="o", color="none",
-               markerfacecolor=col, markersize=6, label=cond)
+               markerfacecolor="none", markeredgecolor=col, markeredgewidth=0.8,
+               markersize=6, label=cond)
     for cond, col in COND_COLOR.items()
 ]
 
@@ -324,12 +337,12 @@ for label, _, _ in METRIC_PAIRS:
 
         for cond, col in COND_COLOR.items():
             idx = conds_f == cond
-            ax.scatter(x_f[idx], y_f[idx], color=col, s=12, alpha=0.7,
-                       zorder=3, edgecolors="none", label=cond)
+            ax.scatter(x_f[idx], y_f[idx], facecolors="none", edgecolors=col,
+                       s=20, alpha=0.8, linewidths=0.8, zorder=3, label=cond)
 
         if len(x_f) >= 2 and x_f.std() > 0 and y_f.std() > 0:
             r, _ = pearsonr(x_f, y_f)
-            ax.text(0.05, 0.95, f"r={r:.3f}  n={len(x_f)}",
+            ax.text(0.05, 0.95, f"r²={r**2:.4f}  n={len(x_f)}",
                     transform=ax.transAxes, fontsize=8, va="top")
     else:
         ax.text(0.5, 0.5, "no data", transform=ax.transAxes,
@@ -352,6 +365,7 @@ for label, _, _ in METRIC_PAIRS:
     print(f"  saved {out_path.name}")
 
 print(f"\nDone. {len(METRIC_PAIRS)} figures in benchmarking/figures_all/")
+
 
 # ── Plate heatmap figures (one per metric per DIV) ────────────────────────────
 #

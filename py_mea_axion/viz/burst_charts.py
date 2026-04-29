@@ -115,11 +115,14 @@ def plot_burst_raster(
     well_spike_dict: Dict[str, np.ndarray],
     well_burst_dict: Dict[str, List[Burst]],
     *,
+    network_burst_list: Optional[list] = None,
     t_start: float = 0.0,
     t_stop: Optional[float] = None,
     spike_color: str = "#333333",
     burst_color: str = "#e87b14",
     burst_alpha: float = 0.25,
+    network_burst_color: str = "#EE3311",
+    network_burst_alpha: float = 0.15,
     asdr_bin_s: float = 0.2,
     asdr_color: str = "#4878CF",
     figsize: Tuple[float, float] = (8.0, 5.5),
@@ -217,6 +220,27 @@ def plot_burst_raster(
         ax_asdr.set_ylabel("Spike count\nper bin", fontsize=8)
         ax_asdr.set_title(title or "Burst raster", fontsize=9)
         ax_asdr.tick_params(labelbottom=False, labelsize=8)
+
+    # ── Network burst spans (full-height background) ──────────────────────────
+    for nb in (network_burst_list or []):
+        nb_start = getattr(nb, "start_time", nb[0])
+        nb_end   = getattr(nb, "end_time",   nb[1])
+        if nb_end < t_start or nb_start > t_stop:
+            continue
+        rect = mpatches.Rectangle(
+            (max(nb_start, t_start), -0.5),
+            min(nb_end, t_stop) - max(nb_start, t_start),
+            n,
+            linewidth=0,
+            facecolor=network_burst_color,
+            alpha=network_burst_alpha,
+            zorder=0,
+        )
+        ax_raster.add_patch(rect)
+        if own_fig:
+            ax_asdr.axvspan(max(nb_start, t_start), min(nb_end, t_stop),
+                            color=network_burst_color, alpha=network_burst_alpha,
+                            zorder=0)
 
     # ── Raster panel ──────────────────────────────────────────────────────────
     for row_idx, eid in enumerate(eids):
