@@ -43,10 +43,10 @@ def plot_metric_trajectory(
     *,
     groups: Optional[Sequence[str]] = None,
     palette: Optional[List[str]] = None,
-    show_replicates: bool = True,
+    show_replicates: bool = False,
     replicate_alpha: float = 0.25,
     show_mean: bool = True,
-    show_sem: bool = True,
+    show_sem: bool = False,
     marker: str = "o",
     figsize: Tuple[float, float] = (6.0, 4.0),
     xlabel: Optional[str] = None,
@@ -124,7 +124,9 @@ def plot_metric_trajectory(
     >>> len(fig.axes[0].lines) > 0
     True
     """
-    required = [metric, time_col, group_col, replicate_col]
+    required = [metric, time_col, group_col]
+    if show_replicates:
+        required.append(replicate_col)
     missing = [c for c in required if c not in df.columns]
     if missing:
         raise ValueError(
@@ -164,7 +166,7 @@ def plot_metric_trajectory(
                     zorder=1,
                 )
 
-        # Group mean ± SEM.
+        # Group mean drawn with SEM error-bar caps; optional band on top.
         if show_mean:
             means, sems, ts = [], [], []
             for t in time_points:
@@ -178,17 +180,33 @@ def plot_metric_trajectory(
             means = np.array(means)
             sems = np.array(sems)
 
-            ax.plot(ts, means, color=color, linewidth=2, marker=marker,
-                    markersize=5, label=group, zorder=3)
+            ax.errorbar(
+                ts, means, yerr=sems,
+                color=color, linewidth=2, marker=marker, markersize=5,
+                capsize=3, capthick=1.2, elinewidth=1.2,
+                label=group, zorder=3,
+            )
             if show_sem and len(sems):
                 ax.fill_between(ts, means - sems, means + sems,
                                 color=color, alpha=0.2, zorder=2)
 
     ax.set_xlabel(xlabel or time_col, fontsize=9)
     ax.set_ylabel(ylabel or metric, fontsize=9)
-    ax.set_title(title or f"{metric} over {time_col}", fontsize=9)
+    if title:
+        ax.set_title(title, fontsize=9)
     ax.tick_params(labelsize=8)
-    ax.set_xticks(time_points)
+    if time_points:
+        # Tick at every integer in the time range so skipped DIVs still
+        # show on the axis.  Falls back to the observed values when the
+        # column is non-integer.
+        all_int = all(float(t).is_integer() for t in time_points)
+        if all_int:
+            lo = int(round(min(time_points)))
+            hi = int(round(max(time_points)))
+            ax.set_xticks(list(range(lo, hi + 1)))
+            ax.set_xlim(lo - 0.5, hi + 0.5)
+        else:
+            ax.set_xticks(time_points)
 
     if groups_to_plot:
         ax.legend(title=group_col, fontsize=8, title_fontsize=8,

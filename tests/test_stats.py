@@ -31,6 +31,8 @@ from py_mea_axion.stats.compare import (
     compare_conditions,
     compute_icc,
     longitudinal_model,
+    pairwise_test,
+    tukey_hsd_pairwise,
 )
 
 
@@ -314,3 +316,222 @@ class TestLongitudinalModel:
             long_df, "mfr", "DIV", "condition", subject_col="subject"
         )
         assert isinstance(result, pd.DataFrame)
+
+
+# ── tukey_hsd_pairwise ────────────────────────────────────────────────────────
+
+class TestTukeyHsdPairwise:
+    """Pairwise Tukey HSD across conditions."""
+
+    def _three_group_df(self, separated: bool = True) -> pd.DataFrame:
+        rng = np.random.default_rng(0)
+        rows = []
+        # SCRM around 2.0, KD4 around 4.0 (well separated), KD5 around 4.0 too.
+        if separated:
+            mus = {"SCRM": 2.0, "KD4": 4.0, "KD5": 4.0}
+        else:
+            mus = {"SCRM": 2.0, "KD4": 2.0, "KD5": 2.0}
+        for cond, mu in mus.items():
+            for _ in range(20):
+                rows.append({"metric": rng.normal(mu, 0.3), "condition": cond})
+        return pd.DataFrame(rows)
+
+    def test_returns_dataframe_with_expected_columns(self):
+        df = self._three_group_df()
+        res = tukey_hsd_pairwise(df, "metric")
+        assert list(res.columns) == ["group_a", "group_b", "mean_diff", "p_adj"]
+
+    def test_three_groups_yield_three_pairs(self):
+        df = self._three_group_df()
+        res = tukey_hsd_pairwise(df, "metric")
+        assert len(res) == 3
+
+    def test_separated_groups_significant(self):
+        df = self._three_group_df(separated=True)
+        res = tukey_hsd_pairwise(df, "metric")
+        # SCRM vs KD4 and SCRM vs KD5 should be significant; KD4 vs KD5 not.
+        scrm_kd4 = res[
+            ((res["group_a"] == "KD4") & (res["group_b"] == "SCRM")) |
+            ((res["group_a"] == "SCRM") & (res["group_b"] == "KD4"))
+        ]
+        kd4_kd5 = res[
+            ((res["group_a"] == "KD4") & (res["group_b"] == "KD5")) |
+            ((res["group_a"] == "KD5") & (res["group_b"] == "KD4"))
+        ]
+        assert float(scrm_kd4["p_adj"].iloc[0]) < 0.001
+        assert float(kd4_kd5["p_adj"].iloc[0]) > 0.05
+
+    def test_identical_groups_not_significant(self):
+        df = self._three_group_df(separated=False)
+        res = tukey_hsd_pairwise(df, "metric")
+        # All pairs should be ns at alpha=0.05.
+        assert (res["p_adj"] > 0.05).all()
+
+    def test_pairs_filter_restricts_output(self):
+        df = self._three_group_df()
+        res = tukey_hsd_pairwise(
+            df, "metric",
+            pairs=[("SCRM", "KD4")],
+        )
+        assert len(res) == 1
+        # Labels are alphabetised within each row.
+        assert res.iloc[0]["group_a"] == "KD4"
+        assert res.iloc[0]["group_b"] == "SCRM"
+
+    def test_groups_subset(self):
+        df = self._three_group_df()
+        res = tukey_hsd_pairwise(df, "metric", groups=["SCRM", "KD4"])
+        assert len(res) == 1
+
+    def test_unknown_pair_silently_skipped(self):
+        df = self._three_group_df()
+        res = tukey_hsd_pairwise(
+            df, "metric",
+            pairs=[("SCRM", "GHOST"), ("SCRM", "KD4")],
+        )
+        assert len(res) == 1
+
+    def test_self_pair_skipped(self):
+        df = self._three_group_df()
+        res = tukey_hsd_pairwise(
+            df, "metric",
+            pairs=[("SCRM", "SCRM")],
+        )
+        assert res.empty
+
+    def test_singleton_group_dropped(self):
+        # Group "KD5" has only one observation; Tukey can't include it.
+        df = pd.DataFrame({
+            "metric":    [1.0, 1.1, 1.0, 4.0, 4.1, 4.0, 7.0],
+            "condition": ["SCRM"] * 3 + ["KD4"] * 3 + ["KD5"],
+        })
+        res = tukey_hsd_pairwise(df, "metric")
+        # Only the SCRM-KD4 pair survives.
+        assert len(res) == 1
+        labels = {res.iloc[0]["group_a"], res.iloc[0]["group_b"]}
+        assert labels == {"SCRM", "KD4"}
+
+    def test_too_few_groups_returns_empty(self):
+        df = pd.DataFrame({
+            "metric":    [1.0, 1.1, 1.2],
+            "condition": ["SCRM", "SCRM", "SCRM"],
+        })
+        res = tukey_hsd_pairwise(df, "metric")
+        assert res.empty
+
+    def test_missing_metric_raises(self):
+        df = pd.DataFrame({"condition": ["A", "B"], "metric": [1.0, 2.0]})
+        with pytest.raises(ValueError, match="not found"):
+            tukey_hsd_pairwise(df, "ghost", group_col="condition")
+
+    def test_missing_group_col_raises(self):
+        df = pd.DataFrame({"condition": ["A", "B"], "metric": [1.0, 2.0]})
+        with pytest.raises(ValueError, match="not found"):
+            tukey_hsd_pairwise(df, "metric", group_col="ghost")
+
+    def test_drops_nan_metric_rows(self):
+        df = pd.DataFrame({
+            "metric":    [1.0, 1.1, np.nan, 4.0, 4.1, 4.2],
+            "condition": ["A", "A", "A", "B", "B", "B"],
+        })
+        res = tukey_hsd_pairwise(df, "metric")
+        # Should still return one pair without crashing.
+        assert len(res) == 1
+
+
+class TestTukeyHsdImportableFromModule:
+    def test_importable_from_stats_top_level(self):
+        # The function should be exposed at py_mea_axion.stats.tukey_hsd_pairwise.
+        from py_mea_axion.stats import tukey_hsd_pairwise as imported
+        assert callable(imported)
+
+
+# ── pairwise_test dispatcher ──────────────────────────────────────────────────
+
+class TestPairwiseTest:
+    def _three_group_df(self, separated: bool = True) -> pd.DataFrame:
+        rng = np.random.default_rng(0)
+        rows = []
+        if separated:
+            mus = {"SCRM": 2.0, "KD4": 4.0, "KD5": 4.0}
+        else:
+            mus = {"SCRM": 2.0, "KD4": 2.0, "KD5": 2.0}
+        for cond, mu in mus.items():
+            for _ in range(20):
+                rows.append({"metric": rng.normal(mu, 0.3), "condition": cond})
+        return pd.DataFrame(rows)
+
+    def test_tukey_default(self):
+        df = self._three_group_df()
+        res = pairwise_test(df, "metric")
+        assert list(res.columns) == ["group_a", "group_b", "mean_diff", "p_adj"]
+        assert len(res) == 3
+
+    def test_mannwhitney_three_groups_returns_three_pairs(self):
+        df = self._three_group_df()
+        res = pairwise_test(df, "metric", test="mannwhitney")
+        assert len(res) == 3
+        assert list(res.columns) == ["group_a", "group_b", "mean_diff", "p_adj"]
+
+    def test_mannwhitney_two_groups(self):
+        df = self._three_group_df()
+        df = df[df["condition"].isin(["SCRM", "KD4"])]
+        res = pairwise_test(df, "metric", test="mannwhitney")
+        assert len(res) == 1
+
+    def test_kruskal_dunn_three_groups(self):
+        df = self._three_group_df()
+        res = pairwise_test(df, "metric", test="kruskal")
+        assert len(res) == 3
+        assert list(res.columns) == ["group_a", "group_b", "mean_diff", "p_adj"]
+
+    def test_separated_groups_significant_across_all_three_tests(self):
+        df = self._three_group_df(separated=True)
+        for test in ("tukey", "mannwhitney", "kruskal"):
+            res = pairwise_test(df, "metric", test=test)
+            scrm_kd4 = res[
+                ((res["group_a"] == "KD4") & (res["group_b"] == "SCRM")) |
+                ((res["group_a"] == "SCRM") & (res["group_b"] == "KD4"))
+            ]
+            assert float(scrm_kd4["p_adj"].iloc[0]) < 0.05, (
+                f"Test '{test}' did not detect a significant difference."
+            )
+
+    def test_pairs_filter_works_for_all_tests(self):
+        df = self._three_group_df()
+        for test in ("tukey", "mannwhitney", "kruskal"):
+            res = pairwise_test(
+                df, "metric", test=test,
+                pairs=[("SCRM", "KD4")],
+            )
+            assert len(res) == 1, f"Test '{test}' did not honour pairs filter."
+
+    def test_unknown_test_raises(self):
+        df = self._three_group_df()
+        with pytest.raises(ValueError, match="Unknown test"):
+            pairwise_test(df, "metric", test="welch")
+
+    def test_singleton_group_dropped_in_mannwhitney(self):
+        df = pd.DataFrame({
+            "metric":    [1.0, 1.1, 1.0, 4.0, 4.1, 4.0, 7.0],
+            "condition": ["SCRM"] * 3 + ["KD4"] * 3 + ["KD5"],
+        })
+        res = pairwise_test(df, "metric", test="mannwhitney")
+        # Only the SCRM-KD4 pair survives.
+        assert len(res) == 1
+        labels = {res.iloc[0]["group_a"], res.iloc[0]["group_b"]}
+        assert labels == {"SCRM", "KD4"}
+
+    def test_two_groups_with_kruskal_still_works(self):
+        # Kruskal-Wallis on 2 groups reduces to a Mann-Whitney-like test;
+        # the dispatcher should still return one pair.
+        df = self._three_group_df()
+        df = df[df["condition"].isin(["SCRM", "KD4"])]
+        res = pairwise_test(df, "metric", test="kruskal")
+        assert len(res) == 1
+
+
+class TestPairwiseTestImportableFromModule:
+    def test_importable_from_stats_top_level(self):
+        from py_mea_axion.stats import pairwise_test as imported
+        assert callable(imported)

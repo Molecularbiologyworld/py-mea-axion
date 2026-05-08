@@ -35,7 +35,7 @@ def plot_sttc_matrix(
     vmin: float = -1.0,
     vmax: float = 1.0,
     figsize: Tuple[float, float] = (4.5, 4.0),
-    title: str = "STTC matrix",
+    title: Optional[str] = None,
     ax: Optional[Axes] = None,
 ) -> Figure:
     """Plot the pairwise STTC matrix as a colour-coded heatmap.
@@ -83,7 +83,8 @@ def plot_sttc_matrix(
     if n == 0:
         ax.text(0.5, 0.5, "No data", ha="center", va="center",
                 transform=ax.transAxes, fontsize=9, color="#888888")
-        ax.set_title(title, fontsize=9)
+        if title:
+            ax.set_title(title, fontsize=9)
         if own_fig:
             fig.tight_layout()
         return fig
@@ -102,7 +103,8 @@ def plot_sttc_matrix(
     cbar.set_label("STTC", fontsize=7)
     cbar.ax.tick_params(labelsize=7)
 
-    ax.set_title(title, fontsize=9)
+    if title:
+        ax.set_title(title, fontsize=9)
 
     if own_fig:
         fig.tight_layout()
@@ -118,7 +120,7 @@ def plot_network_burst_timeline(
     color: str = "#C44E52",
     alpha: float = 0.75,
     figsize: Tuple[float, float] = (8.0, 1.8),
-    title: str = "Network bursts",
+    title: Optional[str] = None,
     ax: Optional[Axes] = None,
 ) -> Figure:
     """Plot a Gantt-style timeline of network burst periods.
@@ -177,7 +179,8 @@ def plot_network_burst_timeline(
     ax.set_ylim(0, 1)
     ax.set_xlabel("Time (s)", fontsize=9)
     ax.set_yticks([])
-    ax.set_title(title, fontsize=9)
+    if title:
+        ax.set_title(title, fontsize=9)
     ax.tick_params(axis="x", labelsize=8)
 
     # Annotate burst count.

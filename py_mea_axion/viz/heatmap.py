@@ -143,8 +143,8 @@ def plot_electrode_heatmap(
     ax.set_xlabel("Electrode column", fontsize=8)
     ax.set_ylabel("Electrode row", fontsize=8)
 
-    _title = title if title is not None else f"{well_id} \u2014 {metric_name}"
-    ax.set_title(_title, fontsize=9)
+    if title:
+        ax.set_title(title, fontsize=9)
 
     # Colour bar.
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)

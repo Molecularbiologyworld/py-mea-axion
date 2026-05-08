@@ -101,8 +101,6 @@ def plot_isi_histogram(
 
     ax.set_xlabel("ISI (s)", fontsize=9)
     ax.set_ylabel("Count", fontsize=9)
-    title = f"ISI distribution — {electrode_id}" if electrode_id else "ISI distribution"
-    ax.set_title(title, fontsize=9)
     ax.tick_params(labelsize=8)
 
     if own_fig:
@@ -116,17 +114,20 @@ def plot_burst_raster(
     well_burst_dict: Dict[str, List[Burst]],
     *,
     network_burst_list: Optional[list] = None,
-    t_start: float = 0.0,
+    t_start: Optional[float] = None,
     t_stop: Optional[float] = None,
+    x_offset: float = 0.0,
     spike_color: str = "#333333",
     burst_color: str = "#e87b14",
     burst_alpha: float = 0.25,
     network_burst_color: str = "#EE3311",
     network_burst_alpha: float = 0.15,
     asdr_bin_s: float = 0.2,
-    asdr_color: str = "#4878CF",
+    asdr_color: str = "#000000",
+    density_color: bool = False,
+    density_cmap: str = "viridis",
     figsize: Tuple[float, float] = (8.0, 5.5),
-    title: str = "",
+    title: Optional[str] = None,
     ax: Optional[Axes] = None,
 ) -> Figure:
     """Plot a spike raster with ASDR histogram and burst-period overlays.
@@ -185,10 +186,12 @@ def plot_burst_raster(
     eids = sorted(well_spike_dict.keys())
     n = len(eids)
 
-    # Infer t_stop from the data if not provided.
+    # Default t_start/t_stop sit in the offset (display) frame.
+    if t_start is None:
+        t_start = float(x_offset)
     if t_stop is None:
         all_times = [ts.max() for ts in well_spike_dict.values() if len(ts)]
-        t_stop = (max(all_times) + 0.1) if all_times else 1.0
+        t_stop = (max(all_times) + x_offset + 0.1) if all_times else (x_offset + 1.0)
 
     own_fig = ax is None
     if own_fig:
@@ -203,7 +206,7 @@ def plot_burst_raster(
     # ── ASDR panel (own figure only) ──────────────────────────────────────────
     if own_fig:
         all_spikes = np.concatenate(
-            [ts for ts in well_spike_dict.values() if len(ts)]
+            [ts + x_offset for ts in well_spike_dict.values() if len(ts)]
         ) if any(len(ts) for ts in well_spike_dict.values()) else np.array([])
 
         if len(all_spikes):
@@ -218,41 +221,57 @@ def plot_burst_raster(
 
         ax_asdr.set_xlim(t_start, t_stop)
         ax_asdr.set_ylabel("Spike count\nper bin", fontsize=8)
-        ax_asdr.set_title(title or "Burst raster", fontsize=9)
+        if title:
+            ax_asdr.set_title(title, fontsize=9)
         ax_asdr.tick_params(labelbottom=False, labelsize=8)
 
-    # ── Network burst spans (full-height background) ──────────────────────────
-    for nb in (network_burst_list or []):
-        nb_start = getattr(nb, "start_time", nb[0])
-        nb_end   = getattr(nb, "end_time",   nb[1])
-        if nb_end < t_start or nb_start > t_stop:
-            continue
-        rect = mpatches.Rectangle(
-            (max(nb_start, t_start), -0.5),
-            min(nb_end, t_stop) - max(nb_start, t_start),
-            n,
-            linewidth=0,
-            facecolor=network_burst_color,
-            alpha=network_burst_alpha,
-            zorder=0,
-        )
-        ax_raster.add_patch(rect)
-        if own_fig:
-            ax_asdr.axvspan(max(nb_start, t_start), min(nb_end, t_stop),
-                            color=network_burst_color, alpha=network_burst_alpha,
-                            zorder=0)
+    # ── Network burst markers (triangles at base of ASDR panel) ──────────────
+    if own_fig:
+        for nb in (network_burst_list or []):
+            nb_start = getattr(nb, "start_time", nb[0]) + x_offset
+            nb_end   = getattr(nb, "end_time",   nb[1]) + x_offset
+            nb_mid   = (nb_start + nb_end) / 2.0
+            if nb_mid < t_start or nb_mid > t_stop:
+                continue
+            ax_asdr.plot(
+                nb_mid, 0,
+                marker="^", color=network_burst_color,
+                markersize=6, clip_on=False, zorder=4,
+                transform=ax_asdr.get_xaxis_transform(),
+            )
+
+    # Pre-compute per-electrode density when colouring by density.
+    bin_edges = None
+    per_eid_counts: Dict[str, np.ndarray] = {}
+    global_max = 0
+    cmap_obj = None
+    if density_color:
+        bin_edges = np.arange(t_start, t_stop + asdr_bin_s, asdr_bin_s)
+        for _eid in eids:
+            shifted = well_spike_dict[_eid] + x_offset
+            in_w = shifted[(shifted >= t_start) & (shifted <= t_stop)]
+            if len(in_w) and len(bin_edges) >= 2:
+                counts, _ = np.histogram(in_w, bins=bin_edges)
+            else:
+                counts = np.zeros(max(len(bin_edges) - 1, 0), dtype=int)
+            per_eid_counts[_eid] = counts
+            if counts.size:
+                global_max = max(global_max, int(counts.max()))
+        cmap_obj = plt.get_cmap(density_cmap)
 
     # ── Raster panel ──────────────────────────────────────────────────────────
     for row_idx, eid in enumerate(eids):
-        spikes     = well_spike_dict[eid]
+        spikes     = well_spike_dict[eid] + x_offset
         in_window  = spikes[(spikes >= t_start) & (spikes <= t_stop)]
 
         for burst in well_burst_dict.get(eid, []):
-            if burst.end_time < t_start or burst.start_time > t_stop:
+            bs = burst.start_time + x_offset
+            be = burst.end_time + x_offset
+            if be < t_start or bs > t_stop:
                 continue
             rect = mpatches.Rectangle(
-                (max(burst.start_time, t_start), row_idx - 0.4),
-                min(burst.end_time, t_stop) - max(burst.start_time, t_start),
+                (max(bs, t_start), row_idx - 0.4),
+                min(be, t_stop) - max(bs, t_start),
                 0.8,
                 linewidth=0,
                 facecolor=burst_color,
@@ -262,8 +281,21 @@ def plot_burst_raster(
             ax_raster.add_patch(rect)
 
         if len(in_window):
-            ax_raster.vlines(in_window, row_idx - 0.4, row_idx + 0.4,
-                             color=spike_color, linewidth=0.5, zorder=2)
+            if density_color and cmap_obj is not None and global_max > 0:
+                # Look up each spike's bin count and map to a colour.
+                counts = per_eid_counts.get(eid)
+                if counts is None or counts.size == 0:
+                    spike_colors = spike_color
+                else:
+                    bin_idx = np.searchsorted(bin_edges, in_window, side="right") - 1
+                    bin_idx = np.clip(bin_idx, 0, len(counts) - 1)
+                    density_at_spike = counts[bin_idx].astype(float) / global_max
+                    spike_colors = cmap_obj(density_at_spike)
+                ax_raster.vlines(in_window, row_idx - 0.4, row_idx + 0.4,
+                                 colors=spike_colors, linewidth=0.7, zorder=2)
+            else:
+                ax_raster.vlines(in_window, row_idx - 0.4, row_idx + 0.4,
+                                 color=spike_color, linewidth=0.5, zorder=2)
 
     ax_raster.set_xlim(t_start, t_stop)
     ax_raster.set_ylim(-0.5, n - 0.5)
@@ -273,8 +305,24 @@ def plot_burst_raster(
     ax_raster.set_ylabel("Electrode", fontsize=9)
     ax_raster.tick_params(axis="x", labelsize=8)
 
-    if not own_fig:
-        ax_raster.set_title(title or "Burst raster", fontsize=9)
+    if not own_fig and title:
+        ax_raster.set_title(title, fontsize=9)
+
+    # Density colour bar underneath the raster panel.
+    if density_color and cmap_obj is not None and own_fig and global_max > 0:
+        import matplotlib.colors as _mcolors
+        sm = plt.cm.ScalarMappable(
+            norm=_mcolors.Normalize(vmin=0, vmax=global_max),
+            cmap=cmap_obj,
+        )
+        sm.set_array([])
+        cb = fig.colorbar(
+            sm, ax=ax_raster,
+            orientation="horizontal",
+            fraction=0.05, pad=0.15, aspect=40,
+        )
+        cb.set_label(f"Spikes per {asdr_bin_s:g} s bin", fontsize=8)
+        cb.ax.tick_params(labelsize=7)
 
     if own_fig:
         fig.tight_layout()

@@ -373,7 +373,7 @@ class TestVizMethods:
 class TestRealSpkSmoke:
     def test_pipeline_on_real_file(self):
         from pathlib import Path
-        spk = Path("LGI2 KD data/20251004_LGI2 KD_Plate 1_D28N(000).spk")
+        spk = Path("LGI2 KD data/Plate1_DIV28.spk")
         if not spk.exists():
             pytest.skip("Real .spk file not available")
 

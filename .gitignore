@@ -32,18 +32,38 @@ data/
 # Generated output (figures and CSVs produced by the pipeline)
 example plots/
 
-# Scientific analysis outputs — unpublished, keep off GitHub
+# Scientific analysis outputs (unpublished, keep off GitHub)
 analysis/
 
-# Unpublished experimental data — keep off GitHub until published
-benchmarking/*_neuralMetrics.csv
-benchmarking/*_raw.csv
-benchmarking/*.log
-benchmarking/figures/
-benchmarking/figures_all/
-benchmarking/figures_plate1/
-benchmarking/figures_plate_heatmap/
-notebooks/notebook_output/
+# Benchmarking outputs and scripts (experiment-specific, kept locally only)
+benchmarking/
+
+# Notebooks (experiment-specific, kept locally only)
+notebooks/
+
+# Manuscript drafts and figure source files
+paper/
+
+# Local example/utility scripts
+make_example_plots.py
+
+# Contributor / architectural notes (kept locally only)
+CONTEXT.md
+
+# Date-stamped output folders produced by build/plot subcommands
+20[0-9][0-9][0-1][0-9][0-3][0-9]/
+
+# Smoke-test output folders
+__build_test/
+__plot_test/
+__plots/
+__test/
+__test_install/
+__test_v[0-9]*/
+
+# Pytest temp dirs
+.pytest_tmp/
+.tmp/
 
 # Claude Code internals
 .claude/

@@ -247,7 +247,7 @@ class TestRealDataSmoke:
 
     def test_mfr_plausible(self):
         spk_path = (
-            "LGI2 KD data/20251004_LGI2 KD_Plate 1_D28N(000).spk"
+            "LGI2 KD data/Plate1_DIV28.spk"
         )
         from pathlib import Path
         if not Path(spk_path).exists():
