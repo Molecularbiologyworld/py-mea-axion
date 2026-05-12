@@ -4,6 +4,8 @@
 [![Python](https://img.shields.io/pypi/pyversions/py-mea-axion.svg)](https://pypi.org/project/py-mea-axion/)
 [![GitHub](https://img.shields.io/badge/GitHub-py--mea--axion-blue?logo=github)](https://github.com/Molecularbiologyworld/py-mea-axion)
 
+Welcome to our MEA Python package!
+
 End-to-end analysis of multi-electrode array (MEA) recordings from **Axion Biosystems** instruments, in Python.
 
 `py-mea-axion` reads raw `.spk` binary files and carries the analysis through spike metrics, burst detection, network-burst detection, and synchrony measurement, all the way to statistical comparisons and publication-ready figures, **driven entirely from the command line**.
