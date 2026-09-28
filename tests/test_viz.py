@@ -335,38 +335,6 @@ class TestPlotBurstRaster:
         params = signature(plot_burst_raster).parameters
         assert params["asdr_color"].default == "#000000"
 
-    def test_density_color_off_by_default_single_color(self, well_spikes, well_bursts):
-        fig = plot_burst_raster(well_spikes, well_bursts)
-        # No density colourbar axes added.
-        assert len(fig.axes) == 2
-
-    def test_density_color_adds_colorbar(self, well_spikes, well_bursts):
-        fig = plot_burst_raster(well_spikes, well_bursts, density_color=True)
-        # ASDR + raster + colourbar = 3 axes.
-        assert len(fig.axes) == 3
-
-    def test_density_color_uses_per_spike_colors(self, well_spikes, well_bursts):
-        fig = plot_burst_raster(well_spikes, well_bursts, density_color=True)
-        # Each LineCollection from vlines should now carry one colour per
-        # spike (an array of N colours), not a single shared colour.
-        from matplotlib.collections import LineCollection
-        line_collections = [
-            c for c in fig.axes[1].collections if isinstance(c, LineCollection)
-        ]
-        # At least one collection should have per-spike colours (>1 unique
-        # RGBA when there's spread in density).
-        if line_collections:
-            colors = line_collections[0].get_colors()
-            # Either an array of per-segment colours, or a single shared one.
-            assert colors.ndim == 2  # (N, 4) RGBA per segment
-
-    def test_density_cmap_param_accepted(self, well_spikes, well_bursts):
-        fig = plot_burst_raster(
-            well_spikes, well_bursts,
-            density_color=True, density_cmap="plasma",
-        )
-        assert isinstance(fig, Figure)
-
 
 # ── viz/trajectory.py ─────────────────────────────────────────────────────────
 

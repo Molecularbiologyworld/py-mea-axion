@@ -124,8 +124,6 @@ def plot_burst_raster(
     network_burst_alpha: float = 0.15,
     asdr_bin_s: float = 0.2,
     asdr_color: str = "#000000",
-    density_color: bool = False,
-    density_cmap: str = "viridis",
     figsize: Tuple[float, float] = (8.0, 5.5),
     title: Optional[str] = None,
     ax: Optional[Axes] = None,
@@ -240,25 +238,6 @@ def plot_burst_raster(
                 transform=ax_asdr.get_xaxis_transform(),
             )
 
-    # Pre-compute per-electrode density when colouring by density.
-    bin_edges = None
-    per_eid_counts: Dict[str, np.ndarray] = {}
-    global_max = 0
-    cmap_obj = None
-    if density_color:
-        bin_edges = np.arange(t_start, t_stop + asdr_bin_s, asdr_bin_s)
-        for _eid in eids:
-            shifted = well_spike_dict[_eid] + x_offset
-            in_w = shifted[(shifted >= t_start) & (shifted <= t_stop)]
-            if len(in_w) and len(bin_edges) >= 2:
-                counts, _ = np.histogram(in_w, bins=bin_edges)
-            else:
-                counts = np.zeros(max(len(bin_edges) - 1, 0), dtype=int)
-            per_eid_counts[_eid] = counts
-            if counts.size:
-                global_max = max(global_max, int(counts.max()))
-        cmap_obj = plt.get_cmap(density_cmap)
-
     # ── Raster panel ──────────────────────────────────────────────────────────
     for row_idx, eid in enumerate(eids):
         spikes     = well_spike_dict[eid] + x_offset
@@ -281,21 +260,8 @@ def plot_burst_raster(
             ax_raster.add_patch(rect)
 
         if len(in_window):
-            if density_color and cmap_obj is not None and global_max > 0:
-                # Look up each spike's bin count and map to a colour.
-                counts = per_eid_counts.get(eid)
-                if counts is None or counts.size == 0:
-                    spike_colors = spike_color
-                else:
-                    bin_idx = np.searchsorted(bin_edges, in_window, side="right") - 1
-                    bin_idx = np.clip(bin_idx, 0, len(counts) - 1)
-                    density_at_spike = counts[bin_idx].astype(float) / global_max
-                    spike_colors = cmap_obj(density_at_spike)
-                ax_raster.vlines(in_window, row_idx - 0.4, row_idx + 0.4,
-                                 colors=spike_colors, linewidth=0.7, zorder=2)
-            else:
-                ax_raster.vlines(in_window, row_idx - 0.4, row_idx + 0.4,
-                                 color=spike_color, linewidth=0.5, zorder=2)
+            ax_raster.vlines(in_window, row_idx - 0.4, row_idx + 0.4,
+                             color=spike_color, linewidth=0.5, zorder=2)
 
     ax_raster.set_xlim(t_start, t_stop)
     ax_raster.set_ylim(-0.5, n - 0.5)
@@ -307,22 +273,6 @@ def plot_burst_raster(
 
     if not own_fig and title:
         ax_raster.set_title(title, fontsize=9)
-
-    # Density colour bar underneath the raster panel.
-    if density_color and cmap_obj is not None and own_fig and global_max > 0:
-        import matplotlib.colors as _mcolors
-        sm = plt.cm.ScalarMappable(
-            norm=_mcolors.Normalize(vmin=0, vmax=global_max),
-            cmap=cmap_obj,
-        )
-        sm.set_array([])
-        cb = fig.colorbar(
-            sm, ax=ax_raster,
-            orientation="horizontal",
-            fraction=0.05, pad=0.15, aspect=40,
-        )
-        cb.set_label(f"Spikes per {asdr_bin_s:g} s bin", fontsize=8)
-        cb.ax.tick_params(labelsize=7)
 
     if own_fig:
         fig.tight_layout()

@@ -159,8 +159,6 @@ mea-axion plot raster      "recording.spk" --fs-override 12500 --wells A1 --out 
 |---|---|
 | `--asdr-bin S` | ASDR histogram bin width in seconds. Default 0.2. |
 | `--time-start S --time-end S` | Restrict to a time window in seconds within the recording. Displayed times keep the original timestamps. |
-| `--density-color` | Colour each spike tick by local spike density (binned at `--asdr-bin`). Adds a colour bar underneath the raster. |
-| `--density-cmap NAME` | Matplotlib colour map for `--density-color`. Default `viridis`. |
 | `--max-isi S --min-spikes N` | Burst-detection thresholds for the orange overlay rectangles. |
 
 ### Flags specific to `plot pca`

@@ -378,24 +378,6 @@ def _add_plot_raster_parser(pp) -> None:
         help="Minimum spikes per burst.  Default: 5.",
     )
     p.add_argument(
-        "--density-color",
-        action="store_true",
-        help=(
-            "Colour each spike tick by local spike density (binned at "
-            "--asdr-bin width, normalised to the busiest bin in the "
-            "well).  Brighter colour = more dense.  Adds a colour bar."
-        ),
-    )
-    p.add_argument(
-        "--density-cmap",
-        default="viridis",
-        metavar="NAME",
-        help=(
-            "Matplotlib colour map for --density-color.  Default: "
-            "viridis (dark blue → yellow), matching the plate heatmap."
-        ),
-    )
-    p.add_argument(
         "--figsize",
         type=float,
         nargs=2,
@@ -1136,8 +1118,6 @@ def _cmd_plot_raster(args: argparse.Namespace) -> int:
             t_start=t_start,
             t_stop=t_stop,
             figsize=figsize_r,
-            density_color=getattr(args, "density_color", False),
-            density_cmap=getattr(args, "density_cmap", "viridis"),
         )
         fig.savefig(
             out_dir / f"{well_id}_raster.png",
